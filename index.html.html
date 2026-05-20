@@ -1,0 +1,1206 @@
+bash
+
+cat > /home/claude/build_painel.py << 'PYEOF'
+import base64
+
+with open('/home/claude/excel_b64_clean.txt') as f:
+    b64 = f.read().strip()
+
+html = r"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel de Metas CODAE</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh}
+:root{
+  --codae:#1a5c2a;--gabinete:#5a6472;--diedan:#c96a00;--dicae:#1a4f8c;
+  --digae:#5e2d8c;--dilog:#b02020;--dinutre:#2e8b57;
+  --ok:#1e7e34;--ok-bg:#d4edda;--ok-border:#c3e6cb;
+  --ea:#0056b3;--ea-bg:#cce5ff;--ea-border:#b8daff;
+  --at:#b21f2d;--at-bg:#f8d7da;--at-border:#f5c6cb;
+  --ni:#5a5a6a;--ni-bg:#e2e3e5;--ni-border:#d6d8db;
+  --header-h:64px;
+}
+
+/* ===== LAYOUT ===== */
+.page-header{
+  background:#fff;border-bottom:1px solid #dce0e6;
+  padding:0 28px;height:var(--header-h);
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;box-shadow:0 1px 4px rgba(0,0,0,.07)
+}
+.page-header-left{display:flex;align-items:center;gap:14px}
+.logo-mark{width:36px;height:36px;background:var(--codae);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0}
+.page-title-wrap{}
+.page-title-main{
+  font-size:16px;font-weight:600;color:#1a1a2e;
+  border:none;background:transparent;outline:none;width:340px;
+  padding:2px 4px;border-radius:4px;cursor:text
+}
+.page-title-main:hover{background:#f5f5f5}
+.page-title-main:focus{background:#fff;box-shadow:0 0 0 2px #1a4f8c44}
+.page-subtitle{
+  font-size:11px;color:#6b7280;border:none;background:transparent;
+  outline:none;width:280px;padding:1px 4px;border-radius:4px;cursor:text
+}
+.page-subtitle:hover{background:#f5f5f5}
+.page-subtitle:focus{background:#fff}
+.header-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+/* ===== BUTTONS ===== */
+.btn{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:7px 14px;font-size:12px;font-weight:500;
+  border-radius:6px;cursor:pointer;border:1px solid transparent;
+  transition:all .15s;white-space:nowrap;font-family:inherit
+}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:#1a4f8c;color:#fff;border-color:#1a4f8c}
+.btn-primary:hover{background:#15407a}
+.btn-success{background:#1e7e34;color:#fff;border-color:#1e7e34}
+.btn-success:hover{background:#186129}
+.btn-danger{background:#b21f2d;color:#fff;border-color:#b21f2d}
+.btn-danger:hover{background:#921a25}
+.btn-outline{background:#fff;color:#374151;border-color:#d1d5db}
+.btn-outline:hover{background:#f9fafb;border-color:#9ca3af}
+.btn-sm{padding:5px 11px;font-size:11px}
+.btn-icon{padding:6px 8px}
+
+/* ===== TABS ===== */
+.tabs-bar{
+  background:#fff;border-bottom:1px solid #dce0e6;
+  padding:0 28px;display:flex;gap:0
+}
+.tab-btn{
+  padding:14px 18px;font-size:13px;font-weight:500;color:#6b7280;
+  border:none;background:transparent;cursor:pointer;
+  border-bottom:3px solid transparent;margin-bottom:-1px;
+  transition:all .15s;font-family:inherit
+}
+.tab-btn:hover{color:#1a1a2e}
+.tab-btn.active{color:#1a4f8c;border-bottom-color:#1a4f8c}
+
+/* ===== MAIN CONTENT ===== */
+.main-content{padding:24px 28px;max-width:1400px;margin:0 auto}
+
+/* ===== MES BADGE ===== */
+.mes-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#1a4f8c;color:#fff;border-radius:6px;
+  padding:5px 12px;font-size:12px;font-weight:600;margin-bottom:18px
+}
+
+/* ===== KPI CARDS ===== */
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:24px}
+@media(max-width:900px){.kpi-grid{grid-template-columns:repeat(3,1fr)}}
+.kpi-card{
+  background:#fff;border-radius:10px;padding:16px 18px;
+  border:1px solid #e5e7eb;border-top:4px solid #e5e7eb
+}
+.kpi-card.total{border-top-color:#1a4f8c}
+.kpi-card.ok{border-top-color:var(--ok)}
+.kpi-card.ea{border-top-color:var(--ea)}
+.kpi-card.at{border-top-color:var(--at)}
+.kpi-card.ni{border-top-color:var(--ni)}
+.kpi-num{font-size:28px;font-weight:700;line-height:1;margin-bottom:4px}
+.kpi-card.total .kpi-num{color:#1a4f8c}
+.kpi-card.ok .kpi-num{color:var(--ok)}
+.kpi-card.ea .kpi-num{color:var(--ea)}
+.kpi-card.at .kpi-num{color:var(--at)}
+.kpi-card.ni .kpi-num{color:var(--ni)}
+.kpi-lbl{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;font-weight:500}
+.kpi-sub{font-size:11px;color:#9ca3af;margin-top:2px}
+
+/* ===== CHARTS ROW ===== */
+.charts-row{display:grid;grid-template-columns:260px 1fr;gap:16px;margin-bottom:24px}
+@media(max-width:800px){.charts-row{grid-template-columns:1fr}}
+.chart-card{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:18px}
+.chart-card h3{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:14px}
+
+.pie-legend{display:flex;flex-direction:column;gap:7px;margin-top:12px}
+.pie-leg-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.pie-leg-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.pie-leg-label{flex:1;color:#374151}
+.pie-leg-val{font-weight:600;color:#1a1a2e}
+
+/* ===== UNIT FILTER PILLS ===== */
+.unit-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.unit-pill{
+  padding:5px 13px;border-radius:20px;font-size:12px;font-weight:600;
+  cursor:pointer;border:2px solid transparent;transition:all .15s;color:#fff
+}
+.unit-pill.all{background:#374151;border-color:#374151}
+.unit-pill.all.active,
+.unit-pill.all:hover{background:#1a1a2e;border-color:#1a1a2e}
+.unit-pill[data-u="CODAE"]{background:var(--codae);border-color:var(--codae)}
+.unit-pill[data-u="Gabinete"]{background:var(--gabinete);border-color:var(--gabinete)}
+.unit-pill[data-u="DIEDAN"]{background:var(--diedan);border-color:var(--diedan)}
+.unit-pill[data-u="DICAE"]{background:var(--dicae);border-color:var(--dicae)}
+.unit-pill[data-u="DIGAE"]{background:var(--digae);border-color:var(--digae)}
+.unit-pill[data-u="DILOG"]{background:var(--dilog);border-color:var(--dilog)}
+.unit-pill[data-u="DINUTRE"]{background:var(--dinutre);border-color:var(--dinutre)}
+.unit-pill:not(.active){opacity:.55}
+.unit-pill.active{opacity:1}
+.unit-pill:hover{opacity:1}
+
+/* ===== FILTER BAR ===== */
+.filter-bar{
+  display:flex;gap:10px;align-items:flex-end;
+  flex-wrap:wrap;margin-bottom:18px;
+  background:#fff;border:1px solid #e5e7eb;border-radius:10px;
+  padding:14px 18px
+}
+.filter-group{display:flex;flex-direction:column;gap:4px}
+.filter-group label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af}
+.filter-group select,.filter-group input{
+  border:1px solid #d1d5db;border-radius:6px;
+  padding:6px 10px;font-size:12px;color:#374151;
+  outline:none;background:#fff;font-family:inherit
+}
+.filter-group select:focus,.filter-group input:focus{border-color:#1a4f8c;box-shadow:0 0 0 2px #1a4f8c22}
+.filter-group input{min-width:180px}
+
+/* ===== SECTION TITLE ===== */
+.section-title{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:#6b7280;padding:0 0 8px;margin-bottom:8px;
+  border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:8px
+}
+.section-count{
+  background:#f3f4f6;color:#6b7280;border-radius:20px;
+  padding:2px 8px;font-size:10px;font-weight:700
+}
+.section-count.at{background:var(--at-bg);color:var(--at)}
+.section-count.ok{background:var(--ok-bg);color:var(--ok)}
+.section-count.ea{background:var(--ea-bg);color:var(--ea)}
+.section-count.ni{background:var(--ni-bg);color:var(--ni)}
+
+/* ===== META CARDS ===== */
+.metas-list{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
+.meta-card{
+  background:#fff;border:1px solid #e5e7eb;border-radius:10px;
+  overflow:hidden;border-left:5px solid #e5e7eb
+}
+.meta-card[data-status="Concluída"]{border-left-color:var(--ok)}
+.meta-card[data-status="Em andamento"]{border-left-color:var(--ea)}
+.meta-card[data-status="Atrasada"]{border-left-color:var(--at)}
+.meta-card[data-status="Não iniciada"]{border-left-color:var(--ni)}
+
+.meta-header{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;cursor:pointer;
+  transition:background .12s
+}
+.meta-header:hover{background:#f9fafb}
+
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-badge{
+  font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;
+  white-space:nowrap;flex-shrink:0;letter-spacing:.02em
+}
+.badge-ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-border)}
+.badge-ea{background:var(--ea-bg);color:var(--ea);border:1px solid var(--ea-border)}
+.badge-at{background:var(--at-bg);color:var(--at);border:1px solid var(--at-border)}
+.badge-ni{background:var(--ni-bg);color:var(--ni);border:1px solid var(--ni-border)}
+
+.unit-tag{
+  font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;
+  color:#fff;flex-shrink:0;letter-spacing:.02em
+}
+.meta-name-text{flex:1;font-size:13px;font-weight:500;color:#1a1a2e;min-width:0}
+.meta-chevron{font-size:18px;color:#9ca3af;transition:transform .2s;flex-shrink:0;line-height:1}
+.meta-chevron.open{transform:rotate(180deg)}
+
+.meta-body{
+  display:none;padding:16px;border-top:1px solid #f3f4f6
+}
+.meta-body.open{display:block}
+
+.meta-detail-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:10px 20px;margin-bottom:14px
+}
+.meta-detail-item .k{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;font-weight:600}
+.meta-detail-item .v{font-size:13px;color:#1a1a2e;font-weight:500}
+
+.pbar-wrap{margin-bottom:14px}
+.pbar-top{display:flex;justify-content:space-between;font-size:11px;color:#6b7280;margin-bottom:5px}
+.pbar-track{height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden}
+.pbar-fill{height:100%;border-radius:4px;transition:width .5s}
+.fill-ok{background:var(--ok)}
+.fill-ea{background:var(--ea)}
+.fill-at{background:var(--at)}
+.fill-ni{background:var(--ni)}
+
+.motivo-box{
+  background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;
+  padding:10px 12px;font-size:12px;color:#92400e;margin-bottom:14px;line-height:1.6
+}
+.motivo-box strong{color:#78350f;font-weight:600}
+
+.resumo-box{
+  background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;
+  padding:10px 12px;font-size:12px;color:#0c4a6e;margin-bottom:14px;line-height:1.6
+}
+.resumo-box strong{color:#075985;font-weight:600}
+
+.diagnostico-box{
+  background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;
+  padding:10px 12px;font-size:12px;color:#374151;margin-bottom:14px;line-height:1.6;white-space:pre-wrap
+}
+.diagnostico-box strong{color:#1a1a2e;font-weight:600}
+
+.meta-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:10px;border-top:1px solid #f3f4f6}
+
+/* ===== MODAL ===== */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.45);
+  z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px
+}
+.modal-box{
+  background:#fff;border-radius:12px;width:100%;max-width:620px;
+  max-height:90vh;overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,.2)
+}
+.modal-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:18px 22px;border-bottom:1px solid #e5e7eb;position:sticky;top:0;background:#fff;z-index:1
+}
+.modal-header h2{font-size:16px;font-weight:600;color:#1a1a2e}
+.modal-close{
+  background:none;border:none;font-size:22px;color:#9ca3af;
+  cursor:pointer;padding:4px 8px;border-radius:4px;line-height:1
+}
+.modal-close:hover{background:#f3f4f6;color:#374151}
+.modal-body{padding:22px}
+.modal-footer{
+  display:flex;gap:8px;justify-content:flex-end;
+  padding:16px 22px;border-top:1px solid #e5e7eb;background:#f9fafb;
+  border-radius:0 0 12px 12px
+}
+
+/* FORM ELEMENTS */
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.form-full{margin-bottom:14px}
+.form-label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:5px}
+.form-control{
+  width:100%;border:1px solid #d1d5db;border-radius:6px;
+  padding:8px 10px;font-size:13px;color:#1a1a2e;
+  outline:none;background:#fff;font-family:inherit
+}
+.form-control:focus{border-color:#1a4f8c;box-shadow:0 0 0 2px #1a4f8c22}
+textarea.form-control{resize:vertical;min-height:70px;line-height:1.5}
+.form-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+
+.req{color:#b21f2d}
+
+/* ===== MACRO TAB ===== */
+.macro-section{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:18px;margin-bottom:20px}
+.macro-section h3{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:14px}
+.macro-meta-row{margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #f3f4f6}
+.macro-meta-row:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.macro-meta-name{font-size:12px;font-weight:600;color:#1a1a2e;margin-bottom:6px}
+.macro-dots{display:flex;gap:8px;flex-wrap:wrap}
+.macro-dot{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:56px}
+.macro-dot-circle{
+  width:44px;height:44px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;border:2px solid
+}
+.macro-dot-mes{font-size:9px;color:#9ca3af}
+.macro-dot-s{font-size:9px;text-align:center;max-width:56px;font-weight:600}
+
+/* ===== HISTORY TAB ===== */
+.history-section{background:#fff;border-radius:10px;border:1px solid #e5e7eb;padding:18px;margin-bottom:20px}
+.history-year-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:#1a1a2e;color:#fff;border-radius:6px;
+  padding:4px 12px;font-size:12px;font-weight:600;margin-bottom:14px
+}
+.no-history{text-align:center;padding:40px;color:#9ca3af}
+
+/* ===== REPLACE MODAL STEPS ===== */
+.step-indicator{display:flex;gap:8px;margin-bottom:18px}
+.step-dot{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;border:2px solid #e5e7eb;color:#9ca3af
+}
+.step-dot.active{background:#1a4f8c;border-color:#1a4f8c;color:#fff}
+.step-dot.done{background:#1e7e34;border-color:#1e7e34;color:#fff}
+.alert-box{
+  border-radius:8px;padding:14px 16px;font-size:13px;line-height:1.6;margin-bottom:16px
+}
+.alert-danger{background:#fee2e2;border:1px solid #fca5a5;color:#7f1d1d}
+.alert-warning{background:#fffbeb;border:1px solid #fcd34d;color:#78350f}
+.alert-info{background:#eff6ff;border:1px solid #93c5fd;color:#1e3a5f}
+
+/* ===== TOAST ===== */
+.toast{
+  position:fixed;bottom:24px;right:24px;z-index:2000;
+  background:#1a1a2e;color:#fff;border-radius:8px;
+  padding:12px 18px;font-size:13px;max-width:360px;
+  display:flex;align-items:center;gap:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.2);
+  opacity:0;transform:translateY(8px);transition:all .25s
+}
+.toast.show{opacity:1;transform:translateY(0)}
+.toast.success{background:#1e7e34}
+.toast.error{background:#b21f2d}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:40px;color:#9ca3af}
+.empty-state .big-icon{font-size:40px;display:block;margin-bottom:8px}
+
+/* FILE INPUT */
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+
+<!-- PAGE HEADER -->
+<header class="page-header">
+  <div class="page-header-left">
+    <div class="logo-mark">SME</div>
+    <div class="page-title-wrap">
+      <div>
+        <input type="text" class="page-title-main" id="pageTitle" value="Acompanhamento de Metas" aria-label="Título do painel">
+      </div>
+      <div>
+        <input type="text" class="page-subtitle" id="pageSubtitle" value="CODAE · Planejamento Estratégico 2026" aria-label="Subtítulo do painel">
+      </div>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-outline btn-sm" onclick="downloadTemplate()">⬇ Modelo Excel</button>
+    <label class="btn btn-outline btn-sm" for="xlsxInput">⬆ Importar Excel</label>
+    <input type="file" id="xlsxInput" accept=".xlsx,.xls" onchange="handleXLSX(this)">
+    <button class="btn btn-success btn-sm" onclick="openNewMetaModal()">+ Nova Meta</button>
+    <button class="btn btn-danger btn-sm" onclick="openReplaceModal()">↺ Substituir Metas</button>
+  </div>
+</header>
+
+<!-- TABS -->
+<nav class="tabs-bar" role="tablist">
+  <button class="tab-btn active" onclick="switchTab('mensal',this)" role="tab" aria-selected="true">📊 Visão Mensal</button>
+  <button class="tab-btn" onclick="switchTab('macro',this)" role="tab" aria-selected="false">📈 Evolução Histórica</button>
+  <button class="tab-btn" onclick="switchTab('history',this)" role="tab" aria-selected="false">🗂 Histórico de Anos Anteriores</button>
+</nav>
+
+<!-- ===== TAB MENSAL ===== -->
+<div id="tabMensal" class="main-content">
+
+  <div id="mesBadge" class="mes-badge">📅 Referência: —</div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <!-- Charts -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <h3>distribuição por status</h3>
+      <div style="position:relative;width:100%;height:170px">
+        <canvas id="pieChart" role="img" aria-label="Gráfico de pizza com distribuição de metas por status"></canvas>
+      </div>
+      <div class="pie-legend" id="pieLegend"></div>
+    </div>
+    <div class="chart-card">
+      <h3>metas por divisão e status</h3>
+      <div style="position:relative;width:100%;height:200px">
+        <canvas id="barChart" role="img" aria-label="Metas por divisão e status"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unit Pills -->
+  <div class="unit-pills" id="unitPills"></div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <div class="filter-group">
+      <label>Mês de Referência</label>
+      <select id="filtroMes" class="form-select" onchange="onFilterChange()">
+        <option value="">Mais recente</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Status</label>
+      <select id="filtroStatus" class="form-select" onchange="onFilterChange()">
+        <option value="">Todos os status</option>
+        <option>Concluída</option>
+        <option>Em andamento</option>
+        <option>Atrasada</option>
+        <option>Não iniciada</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Buscar meta</label>
+      <input type="text" id="filtroBusca" placeholder="Pesquisar por nome..." oninput="onFilterChange()">
+    </div>
+    <div style="margin-left:auto">
+      <button class="btn btn-outline btn-sm" onclick="clearFilters()">✕ Limpar filtros</button>
+    </div>
+  </div>
+
+  <!-- Metas List -->
+  <div id="metasList"></div>
+
+</div>
+
+<!-- ===== TAB MACRO ===== -->
+<div id="tabMacro" class="main-content" style="display:none">
+  <div class="macro-section">
+    <h3>evolução dos status ao longo dos meses</h3>
+    <div style="position:relative;width:100%;height:260px">
+      <canvas id="lineChart" role="img" aria-label="Evolução histórica dos status por mês"></canvas>
+    </div>
+  </div>
+  <div class="macro-section">
+    <h3>progresso mensal por meta</h3>
+    <div id="macroMetasList"></div>
+  </div>
+</div>
+
+<!-- ===== TAB HISTORY ===== -->
+<div id="tabHistory" class="main-content" style="display:none">
+  <div id="historyContent"></div>
+</div>
+
+<!-- ===== MODAL: NOVA / EDITAR META ===== -->
+<div id="metaModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h2 id="modalTitle">Nova Meta</h2>
+      <button class="modal-close" onclick="closeMetaModal()" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div>
+          <label class="form-label">Mês de Referência <span class="req">*</span></label>
+          <input type="text" id="f_mes" class="form-control" placeholder="Ex: Maio" required>
+        </div>
+        <div>
+          <label class="form-label">Divisão/Diretoria <span class="req">*</span></label>
+          <select id="f_unidade" class="form-control form-select" onchange="onUnidadeChange()" required>
+            <option value="">Selecione...</option>
+            <option>CODAE</option>
+            <option>Gabinete</option>
+            <option>DINUTRE</option>
+            <option>DIEDAN</option>
+            <option>DIGAE</option>
+            <option>DICAE</option>
+            <option>DILOG</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-full">
+        <label class="form-label">Meta <span class="req">*</span></label>
+        <select id="f_meta_select" class="form-control form-select" style="display:none" onchange="onMetaSelect()">
+          <option value="">Selecione a meta...</option>
+        </select>
+        <input type="text" id="f_meta" class="form-control" placeholder="Código e descrição completa da meta" required>
+      </div>
+      <div class="form-row">
+        <div>
+          <label class="form-label">Status <span class="req">*</span></label>
+          <select id="f_status" class="form-control form-select" required>
+            <option>Não iniciada</option>
+            <option>Em andamento</option>
+            <option>Atrasada</option>
+            <option>Concluída</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Responsável</label>
+          <input type="text" id="f_responsavel" class="form-control" placeholder="Nome do responsável">
+        </div>
+      </div>
+      <div class="form-full">
+        <label class="form-label">Diagnóstico / Justificativa</label>
+        <textarea id="f_diagnostico" class="form-control" rows="3" placeholder="Fase, andamento, ações do mês, cronograma..."></textarea>
+      </div>
+      <div class="form-full">
+        <label class="form-label">Resumo do Cenário</label>
+        <textarea id="f_resumo" class="form-control" rows="2" placeholder="Síntese do andamento atual..."></textarea>
+      </div>
+      <div class="form-full">
+        <label class="form-label">Articulação / Dependências</label>
+        <input type="text" id="f_articulacao" class="form-control" placeholder="Dependências externas ou articulações necessárias">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeMetaModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveMeta()">💾 Salvar Meta</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: SUBSTITUIR METAS ===== -->
+<div id="replaceModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <h2 id="replaceModalTitle">Substituir todas as metas</h2>
+      <button class="modal-close" onclick="closeReplaceModal()">✕</button>
+    </div>
+    <div class="modal-body" id="replaceModalBody"></div>
+    <div class="modal-footer" id="replaceModalFooter"></div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div class="toast" id="toast"></div>
+
+<!-- ===== FILE INPUT REPLACE ===== -->
+<input type="file" id="replaceInput" accept=".xlsx,.xls" onchange="handleReplace(this)">
+
+<script>
+// ===== DATA =====
+const EXCEL_B64 = "EXCEL_PLACEHOLDER";
+const DIVISOES = ['CODAE','Gabinete','DINUTRE','DIEDAN','DIGAE','DICAE','DILOG'];
+const DIV_COLOR = {
+  'CODAE':'#1a5c2a','Gabinete':'#5a6472','DIEDAN':'#c96a00',
+  'DICAE':'#1a4f8c','DIGAE':'#5e2d8c','DILOG':'#b02020','DINUTRE':'#2e8b57',
+  'GABINETE':'#5a6472'
+};
+const STATUS_MAP = {
+  'Concluída':{cls:'ok',badge:'badge-ok',fill:'fill-ok',color:'#1e7e34'},
+  'Em andamento':{cls:'ea',badge:'badge-ea',fill:'fill-ea',color:'#0056b3'},
+  'Atrasada':{cls:'at',badge:'badge-at',fill:'fill-at',color:'#b21f2d'},
+  'Não iniciada':{cls:'ni',badge:'badge-ni',fill:'fill-ni',color:'#5a5a6a'},
+};
+const STATUS_ORDER = ['Atrasada','Não iniciada','Em andamento','Concluída'];
+const METAS_POR_UNIDADE = {
+  'CODAE':['1.3.2. Expandir a implementação do projeto de Ciências Comportamentais (Lab 11) nas EMEFs','1.4.2. Elaborar e implementar manual para cogestores','5.3.1. Ampliar a implementação do Cardápio Escolar Sustentável nos CEIs','5.3.2. Implementar o Cardápio Escolar Sustentável nas EMEIs e EMEFs, no segundo semestre'],
+  'Gabinete':['4.1.1. Repactuar semestralmente o Planejamento Estratégico com diretores e representantes dos núcleos','4.2.1. Implantar módulo de medição no SIGPAE nas seis DREs ainda sob contratos da Lei nº 8.666/1993','4.2.2. Elaborar proposta para automatização de contagem de refeições','4.2.3. Realizar licitação para os 10 novos editais da alimentação escolar','5.2.1. Incluir nos editais a obrigatoriedade de aquisição de alimentos orgânicos pelas empresas terceirizadas'],
+  'DINUTRE':['1.2.1. Ampliar a Rede Amigos do Peito para 1.400 embaixadores','1.2.2. Implementar piloto de distribuição de kits de apoio ao aleitamento materno','1.3.1. Implementar mecanismo permanente de avaliação das preparações e cardápios pelas(os) estudantes nas EMEFs','1.3.2. Analisar dados sobre desperdício de leite e implementar ações para ampliar a adesão nos CEIs parceiros','5.1.1. Mapear e planejar a aquisição de alimentos diversos da agricultura familiar para atingir 45% do PNAE'],
+  'DIEDAN':['3.1.1. Formar 650 profissionais/unidades da educação sobre as OPEAN por meio de cursos oferecidos pela SME/CODAE e DREs e Parceiros','3.2.1. Ampliar o número de hortas escolares para 1.938 e fortalecer seu uso como ferramenta pedagógica','3.2.2. Divulgar 06 propostas pedagógicas envolvendo alimentos da agricultura familiar','3.2.3. Implementar, monitorar e avaliar o novo fluxo de oficinas culinárias'],
+  'DIGAE':['1.1.1. Avaliar e implementar piloto de instrumento para qualificação do autosserviço','1.1.2. Qualificar as equipes do autosserviço por meio de encontros regionais nas 13 DREs','1.4.1. Realizar 2 encontros de alinhamento com a supervisão técnica sobre o PAE','1.4.3. Realizar supervisão mensal em média de 11 unidades educacionais da RME'],
+  'DICAE':['4.2.4. Cadastrar todos os contratos e ARPs celebradas por CODAE no PNPC e demais portais correlatos'],
+  'DILOG':['2.1.1. Elaborar e publicizar manual de transição da logística de cestas básicas','5.2.1. Iniciar processo licitatório para contratação de armazém integrado']
+};
+
+let allData = [];
+let historyData = [];
+let activeUnit = '';
+let editingId = null;
+let replaceStep = 0;
+let pieCI = null, barCI = null, lineCI = null;
+
+function uid(){ return Math.random().toString(36).slice(2,11); }
+
+// Normalize status from excel
+function normStatus(s){
+  if(!s) return 'Não iniciada';
+  const t = String(s).trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(t==='concluida'||t==='concluída'||t==='concluido') return 'Concluída';
+  if(t==='em andamento') return 'Em andamento';
+  if(t==='atrasada'||t==='atrasado') return 'Atrasada';
+  return 'Não iniciada';
+}
+
+function normUnit(u){
+  if(!u) return '';
+  const t = String(u).trim().toUpperCase();
+  if(t==='GABINETE') return 'Gabinete';
+  // Match case from DIVISOES
+  const found = DIVISOES.find(d=>d.toUpperCase()===t);
+  return found || String(u).trim();
+}
+
+// ===== LOAD INITIAL DATA FROM EXCEL =====
+function loadInitialData(){
+  const b64 = EXCEL_B64;
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    const wb = XLSX.read(bytes, {type:'array'});
+    const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
+    const ws = wb.Sheets[wsName];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    parseRows(rows, true);
+    populateFilters();
+    render();
+  } catch(e){
+    console.error('Erro ao carregar dados iniciais:',e);
+    populateFilters();
+    render();
+  }
+}
+
+function parseRows(rows, isLoad){
+  const parsed = [];
+  rows.forEach(r=>{
+    const unit = normUnit(r['Diretoria']||r['diretoria']||r['Unidade']||'');
+    const meta = String(r['Meta']||r['meta']||'').trim();
+    if(!unit||!meta) return;
+    const status = normStatus(r['Status']||r['status']||'');
+    const mes = String(r['Mês']||r['Mes']||r['mes']||'').trim();
+    const resp = String(r['Responsável']||r['Responsavel']||r['responsavel']||'').trim();
+    const diag = String(r['Diagnóstico / Justificativa']||r['Diagnostico']||r['diagnostico']||'').trim();
+    const resumo = String(r['Resumo do Cenário']||r['Resumo']||r['resumo']||'').trim();
+    const articulacao = String(r['Articulação / Dependências']||r['Articulacao']||r['articulacao']||'').trim();
+    // check if exists already (same mes+unit+meta)
+    if(isLoad){
+      const exists = allData.find(d=>d.mes===mes&&d.unidade===unit&&d.meta===meta);
+      if(exists){
+        // update
+        Object.assign(exists,{status,responsavel:resp,diagnostico:diag,resumo,articulacao});
+        return;
+      }
+    }
+    parsed.push({id:uid(),mes,unidade:unit,meta,status,responsavel:resp,diagnostico:diag,resumo,articulacao});
+  });
+  if(isLoad) allData.push(...parsed);
+  else allData.push(...parsed);
+}
+
+// ===== FILTERS =====
+function getActiveMes(){
+  const v = document.getElementById('filtroMes').value;
+  if(v) return v;
+  const meses = [...new Set(allData.map(d=>d.mes))].sort();
+  return meses[meses.length-1]||'';
+}
+
+function getFiltered(){
+  const mes = getActiveMes();
+  const st = document.getElementById('filtroStatus').value;
+  const bq = document.getElementById('filtroBusca').value.toLowerCase();
+  let d = allData.filter(x=>x.mes===mes);
+  if(activeUnit) d = d.filter(x=>x.unidade===activeUnit);
+  if(st) d = d.filter(x=>x.status===st);
+  if(bq) d = d.filter(x=>x.meta.toLowerCase().includes(bq)||x.unidade.toLowerCase().includes(bq));
+  return d;
+}
+
+function populateFilters(){
+  const meses = [...new Set(allData.map(d=>d.mes))].sort();
+  const sel = document.getElementById('filtroMes');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Mais recente</option>' +
+    meses.map(m=>`<option${m===cur?' selected':''}>${m}</option>`).join('');
+}
+
+function onFilterChange(){ render(); }
+function clearFilters(){
+  document.getElementById('filtroStatus').value='';
+  document.getElementById('filtroBusca').value='';
+  activeUnit='';
+  updateUnitPills();
+  render();
+}
+
+// ===== UNIT PILLS =====
+function buildUnitPills(){
+  const mes = getActiveMes();
+  const units = [...new Set(allData.filter(d=>d.mes===mes).map(d=>d.unidade))];
+  const row = document.getElementById('unitPills');
+  row.innerHTML = `<button class="unit-pill all${!activeUnit?' active':''}" onclick="setUnit('')">Todas as Divisões</button>` +
+    units.map(u=>`<button class="unit-pill${activeUnit===u?' active':''}" data-u="${u}" onclick="setUnit('${u}')">${u}</button>`).join('');
+}
+function setUnit(u){ activeUnit=u; render(); }
+function updateUnitPills(){
+  document.querySelectorAll('#unitPills .unit-pill').forEach(p=>{
+    const u = p.dataset.u||'';
+    p.classList.toggle('active', u===activeUnit);
+  });
+}
+
+// ===== RENDER =====
+function render(){
+  buildUnitPills();
+  const data = getFiltered();
+  const mes = getActiveMes();
+  document.getElementById('mesBadge').textContent = '📅 Referência: '+(mes||'—');
+  renderKPIs(data);
+  renderPie(data);
+  renderBar(data, mes);
+  renderList(data);
+  renderMacro();
+}
+
+function renderKPIs(data){
+  const c={'Concluída':0,'Em andamento':0,'Atrasada':0,'Não iniciada':0};
+  data.forEach(d=>c[d.status]=(c[d.status]||0)+1);
+  document.getElementById('kpiGrid').innerHTML=`
+    <div class="kpi-card total"><div class="kpi-num">${data.length}</div><div class="kpi-lbl">Total de Metas</div></div>
+    <div class="kpi-card ok"><div class="kpi-num">${c['Concluída']}</div><div class="kpi-lbl">Concluídas</div></div>
+    <div class="kpi-card ea"><div class="kpi-num">${c['Em andamento']}</div><div class="kpi-lbl">Em Andamento</div></div>
+    <div class="kpi-card at"><div class="kpi-num">${c['Atrasada']}</div><div class="kpi-lbl">Atrasadas</div></div>
+    <div class="kpi-card ni"><div class="kpi-num">${c['Não iniciada']}</div><div class="kpi-lbl">Não Iniciadas</div></div>`;
+}
+
+function renderPie(data){
+  const keys = ['Concluída','Em andamento','Atrasada','Não iniciada'];
+  const counts = keys.map(k=>data.filter(d=>d.status===k).length);
+  const colors = ['#1e7e34','#0056b3','#b21f2d','#5a5a6a'];
+  if(pieCI) pieCI.destroy();
+  const ctx = document.getElementById('pieChart');
+  if(counts.every(c=>c===0)){ ctx.getContext('2d').clearRect(0,0,ctx.width,ctx.height); document.getElementById('pieLegend').innerHTML=''; return; }
+  pieCI = new Chart(ctx,{
+    type:'doughnut',
+    data:{labels:keys,datasets:[{data:counts,backgroundColor:colors,borderColor:'#fff',borderWidth:3,hoverBorderWidth:3}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw}`}}}}
+  });
+  const total = counts.reduce((a,b)=>a+b,0);
+  document.getElementById('pieLegend').innerHTML = keys.map((k,i)=>`
+    <div class="pie-leg-row">
+      <div class="pie-leg-dot" style="background:${colors[i]}"></div>
+      <span class="pie-leg-label">${k}</span>
+      <span class="pie-leg-val">${counts[i]} (${total?Math.round(counts[i]/total*100):0}%)</span>
+    </div>`).join('');
+}
+
+function renderBar(data, mes){
+  const mesData = allData.filter(d=>d.mes===mes);
+  const units = [...new Set(mesData.map(d=>d.unidade))];
+  const statuses = ['Concluída','Em andamento','Atrasada','Não iniciada'];
+  const colors = ['#1e7e34','#0056b3','#b21f2d','#5a5a6a'];
+  const datasets = statuses.map((s,i)=>({
+    label:s,
+    data:units.map(u=>mesData.filter(d=>d.unidade===u&&d.status===s).length),
+    backgroundColor:colors[i]+'cc',borderColor:colors[i],borderWidth:1
+  }));
+  if(barCI) barCI.destroy();
+  barCI = new Chart(document.getElementById('barChart'),{
+    type:'bar',
+    data:{labels:units,datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      scales:{
+        x:{stacked:true,ticks:{font:{size:11}},grid:{display:false}},
+        y:{stacked:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'#f3f4f6'}}
+      },
+      plugins:{legend:{labels:{font:{size:11},boxWidth:12,boxHeight:12}}}}
+  });
+}
+
+function renderList(data){
+  const grouped = {};
+  STATUS_ORDER.forEach(s=>grouped[s]=[]);
+  data.forEach(d=>(grouped[d.status]=grouped[d.status]||[]).push(d));
+  let html = '';
+  STATUS_ORDER.forEach(st=>{
+    const items = grouped[st]||[];
+    if(!items.length) return;
+    const cfg = STATUS_MAP[st]||STATUS_MAP['Não iniciada'];
+    html += `<div class="section-title">
+      <span>${st}</span>
+      <span class="section-count ${cfg.cls}">${items.length} meta${items.length>1?'s':''}</span>
+    </div>
+    <div class="metas-list">`;
+    items.forEach(m=>{
+      const c = STATUS_MAP[m.status]||STATUS_MAP['Não iniciada'];
+      const dc = DIV_COLOR[m.unidade]||DIV_COLOR[m.unidade.toUpperCase()]||'#374151';
+      const bid = 'body_'+m.id;
+      const diag = (m.diagnostico||'').replace(/\\n/g,'\n');
+      html += `
+      <div class="meta-card" data-status="${m.status}">
+        <div class="meta-header" onclick="toggleMeta('${bid}')">
+          <div class="status-dot" style="background:${c.color}"></div>
+          <span class="status-badge ${c.badge}">${m.status}</span>
+          <span class="unit-tag" style="background:${dc}">${m.unidade}</span>
+          <span class="meta-name-text">${escHtml(m.meta)}</span>
+          <span class="meta-chevron" id="chev_${bid}">⌄</span>
+        </div>
+        <div class="meta-body" id="${bid}">
+          <div class="meta-detail-grid">
+            <div class="meta-detail-item"><div class="k">Responsável</div><div class="v">${escHtml(m.responsavel)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Mês de referência</div><div class="v">${escHtml(m.mes)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Divisão</div><div class="v" style="color:${dc};font-weight:700">${escHtml(m.unidade)}</div></div>
+            <div class="meta-detail-item"><div class="k">Status</div><div class="v"><span class="status-badge ${c.badge}">${m.status}</span></div></div>
+          </div>
+          ${diag?`<div class="diagnostico-box"><strong>Diagnóstico / Justificativa:</strong>\n${escHtml(diag)}</div>`:''}
+          ${m.resumo?`<div class="resumo-box"><strong>Resumo do Cenário:</strong> ${escHtml(m.resumo)}</div>`:''}
+          ${m.articulacao&&m.articulacao!=='Nenhuma pendência externa reportada.'?`<div class="motivo-box"><strong>Articulação / Dependências:</strong> ${escHtml(m.articulacao)}</div>`:''}
+          <div class="meta-actions">
+            <button class="btn btn-outline btn-sm" onclick="openEditModal('${m.id}')">✏ Editar</button>
+            <button class="btn btn-outline btn-sm" style="color:#b21f2d;border-color:#fca5a5" onclick="deleteMeta('${m.id}')">🗑 Remover</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  if(!html) html = `<div class="empty-state"><span class="big-icon">🎯</span>Nenhuma meta encontrada com os filtros aplicados.</div>`;
+  document.getElementById('metasList').innerHTML = html;
+}
+
+function toggleMeta(bid){
+  const b = document.getElementById(bid);
+  const c = document.getElementById('chev_'+bid);
+  if(!b||!c) return;
+  b.classList.toggle('open');
+  c.classList.toggle('open');
+}
+
+// ===== MACRO =====
+function renderMacro(){
+  const meses = [...new Set(allData.map(d=>d.mes))].sort();
+  const statuses = ['Concluída','Em andamento','Atrasada','Não iniciada'];
+  const colors = ['#1e7e34','#0056b3','#b21f2d','#5a5a6a'];
+  const datasets = statuses.map((s,i)=>({
+    label:s,
+    data:meses.map(m=>allData.filter(d=>d.mes===m&&d.status===s).length),
+    borderColor:colors[i],backgroundColor:colors[i]+'22',
+    fill:true,tension:.35,pointRadius:4,pointBackgroundColor:colors[i]
+  }));
+  if(lineCI) lineCI.destroy();
+  lineCI = new Chart(document.getElementById('lineChart'),{
+    type:'line',
+    data:{labels:meses.length?meses:['—'],datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      scales:{
+        y:{beginAtZero:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'#f3f4f6'}},
+        x:{ticks:{font:{size:11}},grid:{display:false}}
+      },
+      plugins:{legend:{labels:{font:{size:11},boxWidth:12,boxHeight:12}}}}
+  });
+
+  const metas = [...new Set(allData.map(d=>d.meta))];
+  let html = '';
+  metas.forEach(meta=>{
+    html += `<div class="macro-meta-row">
+      <div class="macro-meta-name">${escHtml(meta)}</div>
+      <div class="macro-dots">`;
+    meses.forEach(m=>{
+      const e = allData.find(d=>d.mes===m&&d.meta===meta);
+      if(e){
+        const cfg = STATUS_MAP[e.status]||STATUS_MAP['Não iniciada'];
+        const label = e.status.replace('Não iniciada','N.I.').replace('Em andamento','Andam.').replace('Concluída','Conc.');
+        html += `<div class="macro-dot">
+          <span class="macro-dot-mes">${m}</span>
+          <div class="macro-dot-circle" style="background:${cfg.color}22;border-color:${cfg.color};color:${cfg.color}">
+            <span>${e.status==='Concluída'?'✓':e.status==='Atrasada'?'!':'→'}</span>
+          </div>
+          <span class="macro-dot-s" style="color:${cfg.color}">${label}</span>
+        </div>`;
+      } else {
+        html += `<div class="macro-dot">
+          <span class="macro-dot-mes">${m}</span>
+          <div class="macro-dot-circle" style="background:#f3f4f6;border-color:#e5e7eb;color:#9ca3af">—</div>
+          <span class="macro-dot-s" style="color:#9ca3af">s/d</span>
+        </div>`;
+      }
+    });
+    html += '</div></div>';
+  });
+  document.getElementById('macroMetasList').innerHTML = html||`<div class="empty-state"><span class="big-icon">📈</span>Adicione dados em mais de um mês para ver a evolução histórica.</div>`;
+}
+
+// ===== HISTORY TAB =====
+function renderHistory(){
+  if(!historyData.length){
+    document.getElementById('historyContent').innerHTML=`
+      <div class="history-section no-history">
+        <span class="big-icon">🗂</span>
+        <p style="font-size:14px;color:#6b7280;margin-top:8px">Nenhum histórico de anos anteriores registrado.</p>
+        <p style="font-size:12px;color:#9ca3af;margin-top:6px">Use o botão "Substituir Metas" para iniciar um novo ano de monitoramento e preservar o histórico atual.</p>
+      </div>`;
+    return;
+  }
+  const years = [...new Set(historyData.map(d=>d.ano))].sort().reverse();
+  let html = '';
+  years.forEach(ano=>{
+    const yearData = historyData.filter(d=>d.ano===ano);
+    const c={'Concluída':0,'Em andamento':0,'Atrasada':0,'Não iniciada':0};
+    yearData.forEach(d=>c[d.status]=(c[d.status]||0)+1);
+    html += `<div class="history-section">
+      <div class="history-year-badge">📅 Ano: ${ano}</div>
+      <div class="kpi-grid" style="margin-bottom:16px">
+        <div class="kpi-card total"><div class="kpi-num">${yearData.length}</div><div class="kpi-lbl">Total</div></div>
+        <div class="kpi-card ok"><div class="kpi-num">${c['Concluída']}</div><div class="kpi-lbl">Concluídas</div></div>
+        <div class="kpi-card ea"><div class="kpi-num">${c['Em andamento']}</div><div class="kpi-lbl">Em Andamento</div></div>
+        <div class="kpi-card at"><div class="kpi-num">${c['Atrasada']}</div><div class="kpi-lbl">Atrasadas</div></div>
+        <div class="kpi-card ni"><div class="kpi-num">${c['Não iniciada']}</div><div class="kpi-lbl">Não Iniciadas</div></div>
+      </div>
+      <div class="metas-list">`;
+    yearData.forEach(m=>{
+      const cfg = STATUS_MAP[m.status]||STATUS_MAP['Não iniciada'];
+      const dc = DIV_COLOR[m.unidade]||'#374151';
+      html += `<div class="meta-card" data-status="${m.status}">
+        <div class="meta-header" style="cursor:default">
+          <div class="status-dot" style="background:${cfg.color}"></div>
+          <span class="status-badge ${cfg.badge}">${m.status}</span>
+          <span class="unit-tag" style="background:${dc}">${m.unidade}</span>
+          <span class="meta-name-text">${escHtml(m.meta)}</span>
+          <span style="font-size:11px;color:#9ca3af">${m.mes}</span>
+        </div>
+      </div>`;
+    });
+    html += '</div></div>';
+  });
+  document.getElementById('historyContent').innerHTML = html;
+}
+
+// ===== TAB SWITCH =====
+function switchTab(tab, el){
+  document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tabMensal').style.display = tab==='mensal'?'block':'none';
+  document.getElementById('tabMacro').style.display = tab==='macro'?'block':'none';
+  document.getElementById('tabHistory').style.display = tab==='history'?'block':'none';
+  if(tab==='history') renderHistory();
+}
+
+// ===== MODAL META =====
+function openNewMetaModal(){
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Nova Meta';
+  clearMetaForm();
+  document.getElementById('metaModal').style.display = 'flex';
+}
+
+function openEditModal(id){
+  const m = allData.find(d=>d.id===id);
+  if(!m) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Editar Meta';
+  document.getElementById('f_mes').value = m.mes||'';
+  document.getElementById('f_unidade').value = m.unidade||'';
+  document.getElementById('f_meta').value = m.meta||'';
+  document.getElementById('f_meta_select').style.display = 'none';
+  document.getElementById('f_meta').style.display = '';
+  document.getElementById('f_status').value = m.status||'Não iniciada';
+  document.getElementById('f_responsavel').value = m.responsavel||'';
+  document.getElementById('f_diagnostico').value = (m.diagnostico||'').replace(/\\n/g,'\n');
+  document.getElementById('f_resumo').value = m.resumo||'';
+  document.getElementById('f_articulacao').value = m.articulacao||'';
+  document.getElementById('metaModal').style.display = 'flex';
+}
+
+function closeMetaModal(){
+  document.getElementById('metaModal').style.display = 'none';
+  editingId = null;
+}
+
+function clearMetaForm(){
+  ['f_mes','f_meta','f_responsavel','f_diagnostico','f_resumo','f_articulacao'].forEach(id=>{
+    document.getElementById(id).value='';
+  });
+  document.getElementById('f_unidade').value='';
+  document.getElementById('f_status').value='Não iniciada';
+  document.getElementById('f_meta_select').style.display='none';
+  document.getElementById('f_meta').style.display='';
+}
+
+function onUnidadeChange(){
+  const u = document.getElementById('f_unidade').value;
+  const sel = document.getElementById('f_meta_select');
+  const inp = document.getElementById('f_meta');
+  const metas = METAS_POR_UNIDADE[u]||[];
+  if(metas.length && !editingId){
+    sel.innerHTML = '<option value="">Selecione a meta...</option>'+metas.map(m=>`<option value="${escAttr(m)}">${escHtml(m)}</option>`).join('');
+    sel.style.display = '';
+    inp.style.display = 'none';
+    inp.value = '';
+  } else {
+    sel.style.display = 'none';
+    inp.style.display = '';
+  }
+}
+
+function onMetaSelect(){
+  const sel = document.getElementById('f_meta_select');
+  const inp = document.getElementById('f_meta');
+  if(sel.value){ inp.value = sel.value; }
+}
+
+function saveMeta(){
+  const mes = document.getElementById('f_mes').value.trim();
+  const unidade = document.getElementById('f_unidade').value.trim();
+  const meta = document.getElementById('f_meta').value.trim() || document.getElementById('f_meta_select').value;
+  const status = document.getElementById('f_status').value;
+  if(!mes){showToast('Informe o mês de referência.','error');return;}
+  if(!unidade){showToast('Selecione a divisão.','error');return;}
+  if(!meta){showToast('Preencha a descrição da meta.','error');return;}
+  const obj = {
+    id: editingId||uid(), mes, unidade, meta, status,
+    responsavel: document.getElementById('f_responsavel').value.trim(),
+    diagnostico: document.getElementById('f_diagnostico').value.trim(),
+    resumo: document.getElementById('f_resumo').value.trim(),
+    articulacao: document.getElementById('f_articulacao').value.trim()
+  };
+  if(editingId){
+    const i = allData.findIndex(d=>d.id===editingId);
+    if(i>=0) allData[i]=obj;
+    showToast('Meta atualizada com sucesso!','success');
+  } else {
+    allData.push(obj);
+    showToast('Meta adicionada com sucesso!','success');
+  }
+  closeMetaModal();
+  populateFilters();
+  render();
+}
+
+function deleteMeta(id){
+  if(!confirm('Remover esta meta definitivamente?')) return;
+  allData = allData.filter(d=>d.id!==id);
+  render();
+  showToast('Meta removida.','success');
+}
+
+// ===== REPLACE MODAL =====
+function openReplaceModal(){
+  replaceStep = 1;
+  renderReplaceStep();
+  document.getElementById('replaceModal').style.display = 'flex';
+}
+
+function closeReplaceModal(){
+  document.getElementById('replaceModal').style.display = 'none';
+  replaceStep = 0;
+}
+
+function renderReplaceStep(){
+  const title = document.getElementById('replaceModalTitle');
+  const body = document.getElementById('replaceModalBody');
+  const footer = document.getElementById('replaceModalFooter');
+  const steps = `<div class="step-indicator">
+    <div class="step-dot ${replaceStep>=1?'active':''}">1</div>
+    <div style="flex:0 0 24px;height:2px;background:#e5e7eb;align-self:center;margin:0 4px"></div>
+    <div class="step-dot ${replaceStep>=2?'active':''}">2</div>
+    <div style="flex:0 0 24px;height:2px;background:#e5e7eb;align-self:center;margin:0 4px"></div>
+    <div class="step-dot ${replaceStep>=3?'active':''}">3</div>
+  </div>`;
+  if(replaceStep===1){
+    title.textContent='Substituir todas as metas e iniciar novo monitoramento';
+    body.innerHTML=steps+`
+      <div class="alert-box alert-warning">
+        <strong>⚠ Atenção:</strong> Esta ação irá arquivar todas as metas atuais no histórico e substituí-las por novas metas. Esta operação não pode ser desfeita.
+      </div>
+      <p style="font-size:13px;color:#374151;line-height:1.6">Você está prestes a iniciar um novo ciclo de monitoramento anual. As metas atuais serão preservadas na aba de histórico e não serão perdidas.</p>`;
+    footer.innerHTML=`
+      <button class="btn btn-outline" onclick="closeReplaceModal()">Cancelar</button>
+      <button class="btn btn-danger" onclick="replaceStep=2;renderReplaceStep()">Continuar →</button>`;
+  } else if(replaceStep===2){
+    title.textContent='Confirmação final — etapa 2 de 3';
+    body.innerHTML=steps+`
+      <div class="alert-box alert-danger">
+        <strong>🚨 Confirmação obrigatória:</strong> As metas do monitoramento atual serão arquivadas permanentemente no histórico de anos anteriores. Ao fazer o upload do novo Excel, o sistema iniciará um novo ciclo de monitoramento.
+      </div>
+      <p style="font-size:13px;color:#374151;line-height:1.6;margin-top:8px">Total de metas que serão arquivadas: <strong>${allData.length} registros</strong> em ${[...new Set(allData.map(d=>d.mes))].length} mês(es).</p>`;
+    footer.innerHTML=`
+      <button class="btn btn-outline" onclick="replaceStep=1;renderReplaceStep()">← Voltar</button>
+      <button class="btn btn-danger" onclick="replaceStep=3;renderReplaceStep()">Confirmar e continuar →</button>`;
+  } else if(replaceStep===3){
+    title.textContent='Upload do novo Excel — etapa 3 de 3';
+    body.innerHTML=steps+`
+      <div class="alert-box alert-info">
+        <strong>✅ Confirmado.</strong> Faça o upload do novo Excel com as metas do novo ciclo de monitoramento.
+      </div>
+      <p style="font-size:13px;color:#374151;margin-bottom:14px">O arquivo deve seguir a estrutura do modelo padrão com as colunas: Diretoria, Mês, Meta, Status, Diagnóstico, Resumo, Responsável e Articulação.</p>
+      <label class="btn btn-primary" for="replaceInput" style="display:inline-flex;cursor:pointer">⬆ Selecionar novo Excel</label>`;
+    footer.innerHTML=`
+      <button class="btn btn-outline" onclick="replaceStep=2;renderReplaceStep()">← Voltar</button>`;
+  }
+}
+
+function handleReplace(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const wb = XLSX.read(e.target.result,{type:'binary'});
+      const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
+      const ws = wb.Sheets[wsName];
+      const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
+      // Archive current
+      const ano = new Date().getFullYear();
+      historyData.push(...allData.map(d=>({...d,ano})));
+      allData = [];
+      // Load new
+      parseRows(rows, true);
+      closeReplaceModal();
+      populateFilters();
+      render();
+      showToast(`Metas substituídas! ${allData.length} novas metas carregadas. Histórico arquivado.`,'success');
+    } catch(err){ showToast('Erro ao ler o arquivo: '+err.message,'error'); }
+  };
+  reader.readAsBinaryString(file);
+  input.value='';
+}
+
+// ===== IMPORT EXCEL =====
+function handleXLSX(input){
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e=>{
+    try{
+      const wb = XLSX.read(e.target.result,{type:'binary'});
+      const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
+      const ws = wb.Sheets[wsName];
+      const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
+      parseRows(rows, true);
+      populateFilters();
+      render();
+      showToast(`Importação concluída! ${rows.length} registros processados.`,'success');
+    } catch(err){ showToast('Erro ao importar: '+err.message,'error'); }
+  };
+  reader.readAsBinaryString(file);
+  input.value='';
+}
+
+// ===== DOWNLOAD TEMPLATE =====
+function downloadTemplate(){
+  try{
+    const bin = atob(EXCEL_B64);
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    const blob = new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Modelo_Padrão_Metas_CODAE.xlsx';
+    a.click();
+    showToast('Modelo Excel baixado com sucesso!','success');
+  } catch(e){ showToast('Erro ao baixar modelo.','error'); }
+}
+
+// ===== TOAST =====
+function showToast(msg, type=''){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show'+(type?' '+type:'');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>{ t.classList.remove('show'); }, 3500);
+}
+
+// ===== UTILS =====
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ return String(s||'').replace(/"/g,'&quot;'); }
+
+// ===== CLOSE MODAL ON OVERLAY CLICK =====
+document.addEventListener('click', e=>{
+  if(e.target.id==='metaModal') closeMetaModal();
+  if(e.target.id==='replaceModal') closeReplaceModal();
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ closeMetaModal(); closeReplaceModal(); }
+});
+
+// ===== INIT =====
+loadInitialData();
+</script>
+</body>
+</html>
+"""
+
+# Inject excel b64
+html = html.replace('EXCEL_PLACEHOLDER', b64)
+
+with open('/mnt/user-data/outputs/painel_metas_codae.html', 'w', encoding='utf-8') as f:
+    f.write(html)
+
+print('Done! Size:', len(html))
+PYEOF
+python3 /home/claude/build_painel.py
+Saída
+
+Done! Size: 73527
