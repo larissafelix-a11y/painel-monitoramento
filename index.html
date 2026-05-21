@@ -1,12 +1,5 @@
-bash
 
-cat > /home/claude/build_painel.py << 'PYEOF'
-import base64
-
-with open('/home/claude/excel_b64_clean.txt') as f:
-    b64 = f.read().strip()
-
-html = r"""<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -254,6 +247,12 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;mi
   padding:10px 12px;font-size:12px;color:#374151;margin-bottom:14px;line-height:1.6;white-space:pre-wrap
 }
 .diagnostico-box strong{color:#1a1a2e;font-weight:600}
+.diagnostico-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:14px}
+.diagnostico-section{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;font-size:12px;color:#374151;line-height:1.6;white-space:pre-wrap}
+.diagnostico-section strong{display:block;color:#1a1a2e;font-weight:700;margin-bottom:4px;text-transform:uppercase;font-size:10px;letter-spacing:.05em}
+.diagnostico-section.ea{background:#f0f9ff;border-color:#bae6fd;color:#0c4a6e}
+.diagnostico-section.at{background:#fff7ed;border-color:#fed7aa;color:#7c2d12}
+.diagnostico-section.ni{background:#f4f4f5;border-color:#d4d4d8;color:#3f3f46}
 
 .meta-actions{display:flex;gap:8px;justify-content:flex-end;padding-top:10px;border-top:1px solid #f3f4f6}
 
@@ -366,7 +365,7 @@ input[type=file]{display:none}
 <!-- PAGE HEADER -->
 <header class="page-header">
   <div class="page-header-left">
-    <div class="logo-mark">SME</div>
+    <div class="logo-mark">CODAE</div>
     <div class="page-title-wrap">
       <div>
         <input type="text" class="page-title-main" id="pageTitle" value="Acompanhamento de Metas" aria-label="Título do painel">
@@ -377,7 +376,7 @@ input[type=file]{display:none}
     </div>
   </div>
   <div class="header-actions">
-    <button class="btn btn-outline btn-sm" onclick="downloadTemplate()">⬇ Modelo Excel</button>
+    <button class="btn btn-outline btn-sm" onclick="downloadTemplate()">⬇ Baixar modelo padrão de Excel</button>
     <label class="btn btn-outline btn-sm" for="xlsxInput">⬆ Importar Excel</label>
     <input type="file" id="xlsxInput" accept=".xlsx,.xls" onchange="handleXLSX(this)">
     <button class="btn btn-success btn-sm" onclick="openNewMetaModal()">+ Nova Meta</button>
@@ -482,7 +481,21 @@ input[type=file]{display:none}
       <div class="form-row">
         <div>
           <label class="form-label">Mês de Referência <span class="req">*</span></label>
-          <input type="text" id="f_mes" class="form-control" placeholder="Ex: Maio" required>
+          <select id="f_mes" class="form-control form-select" required>
+            <option value="">Selecione...</option>
+            <option>Janeiro</option>
+            <option>Fevereiro</option>
+            <option>Março</option>
+            <option>Abril</option>
+            <option>Maio</option>
+            <option>Junho</option>
+            <option>Julho</option>
+            <option>Agosto</option>
+            <option>Setembro</option>
+            <option>Outubro</option>
+            <option>Novembro</option>
+            <option>Dezembro</option>
+          </select>
         </div>
         <div>
           <label class="form-label">Divisão/Diretoria <span class="req">*</span></label>
@@ -522,7 +535,10 @@ input[type=file]{display:none}
       </div>
       <div class="form-full">
         <label class="form-label">Diagnóstico / Justificativa</label>
-        <textarea id="f_diagnostico" class="form-control" rows="3" placeholder="Fase, andamento, ações do mês, cronograma..."></textarea>
+        <textarea id="f_diagnostico" class="form-control" rows="3" placeholder="Ex.: Fase: ...
+Andamento: ...
+Ações do mês: ...
+Cronograma: ..."></textarea>
       </div>
       <div class="form-full">
         <label class="form-label">Resumo do Cenário</label>
@@ -560,8 +576,9 @@ input[type=file]{display:none}
 
 <script>
 // ===== DATA =====
-const EXCEL_B64 = "EXCEL_PLACEHOLDER";
+const EXCEL_B64 = "";
 const DIVISOES = ['CODAE','Gabinete','DINUTRE','DIEDAN','DIGAE','DICAE','DILOG'];
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const DIV_COLOR = {
   'CODAE':'#1a5c2a','Gabinete':'#5a6472','DIEDAN':'#c96a00',
   'DICAE':'#1a4f8c','DIGAE':'#5e2d8c','DILOG':'#b02020','DINUTRE':'#2e8b57',
@@ -616,6 +633,7 @@ function normUnit(u){
 // ===== LOAD INITIAL DATA FROM EXCEL =====
 function loadInitialData(){
   const b64 = EXCEL_B64;
+  if(!b64){ populateFilters(); render(); return; }
   try {
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
@@ -634,38 +652,74 @@ function loadInitialData(){
   }
 }
 
-function parseRows(rows, isLoad){
+function getCell(row, names){
+  for(const name of names){
+    if(Object.prototype.hasOwnProperty.call(row, name) && row[name] !== undefined && row[name] !== null) return row[name];
+  }
+  const normalized = {};
+  Object.keys(row).forEach(k=>{
+    const nk = String(k).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    normalized[nk] = row[k];
+  });
+  for(const name of names){
+    const nk = String(name).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(Object.prototype.hasOwnProperty.call(normalized, nk)) return normalized[nk];
+  }
+  return '';
+}
+
+function normalizeMonth(m){
+  const raw = String(m||'').trim();
+  if(!raw) return '';
+  const clean = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const found = MESES.find(x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')===clean);
+  return found || raw;
+}
+
+function sortMeses(lista){
+  return [...lista].sort((a,b)=>{
+    const ia = MESES.indexOf(normalizeMonth(a));
+    const ib = MESES.indexOf(normalizeMonth(b));
+    if(ia>=0 && ib>=0) return ia-ib;
+    if(ia>=0) return -1;
+    if(ib>=0) return 1;
+    return String(a).localeCompare(String(b),'pt-BR');
+  });
+}
+
+function parseRows(rows, isLoad, mesMonitoramento=''){
   const parsed = [];
+  const mesForcado = normalizeMonth(mesMonitoramento);
   rows.forEach(r=>{
-    const unit = normUnit(r['Diretoria']||r['diretoria']||r['Unidade']||'');
-    const meta = String(r['Meta']||r['meta']||'').trim();
+    const unit = normUnit(getCell(r, ['Diretoria','diretoria','Unidade','unidade','Divisão','Divisao','divisao']));
+    const meta = String(getCell(r, ['Meta','meta','Descrição da Meta','Descricao da Meta'])).trim();
     if(!unit||!meta) return;
-    const status = normStatus(r['Status']||r['status']||'');
-    const mes = String(r['Mês']||r['Mes']||r['mes']||'').trim();
-    const resp = String(r['Responsável']||r['Responsavel']||r['responsavel']||'').trim();
-    const diag = String(r['Diagnóstico / Justificativa']||r['Diagnostico']||r['diagnostico']||'').trim();
-    const resumo = String(r['Resumo do Cenário']||r['Resumo']||r['resumo']||'').trim();
-    const articulacao = String(r['Articulação / Dependências']||r['Articulacao']||r['articulacao']||'').trim();
-    // check if exists already (same mes+unit+meta)
+    const status = normStatus(getCell(r, ['Status','status','Situação','Situacao']));
+    const mesOriginal = getCell(r, ['Mês','Mes','mes','Mês de Referência','Mes de Referencia','Mês Referência','Mes Referencia']);
+    const mes = mesForcado || normalizeMonth(mesOriginal);
+    if(!mes) return;
+    const resp = String(getCell(r, ['Responsável','Responsavel','responsavel'])).trim();
+    const diag = String(getCell(r, ['Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico','diagnostico','Justificativa','justificativa'])).trim();
+    const resumo = String(getCell(r, ['Resumo do Cenário','Resumo do Cenario','Resumo','resumo'])).trim();
+    const articulacao = String(getCell(r, ['Articulação / Dependências','Articulacao / Dependencias','Articulação','Articulacao','articulacao','Dependências','Dependencias'])).trim();
     if(isLoad){
       const exists = allData.find(d=>d.mes===mes&&d.unidade===unit&&d.meta===meta);
       if(exists){
-        // update
         Object.assign(exists,{status,responsavel:resp,diagnostico:diag,resumo,articulacao});
         return;
       }
     }
     parsed.push({id:uid(),mes,unidade:unit,meta,status,responsavel:resp,diagnostico:diag,resumo,articulacao});
   });
-  if(isLoad) allData.push(...parsed);
-  else allData.push(...parsed);
+  allData.push(...parsed);
+  return parsed.length;
 }
 
 // ===== FILTERS =====
 function getActiveMes(){
   const v = document.getElementById('filtroMes').value;
   if(v) return v;
-  const meses = [...new Set(allData.map(d=>d.mes))].sort();
+  const meses = sortMeses([...new Set(allData.map(d=>d.mes))]);
   return meses[meses.length-1]||'';
 }
 
@@ -681,7 +735,7 @@ function getFiltered(){
 }
 
 function populateFilters(){
-  const meses = [...new Set(allData.map(d=>d.mes))].sort();
+  const meses = sortMeses([...new Set(allData.map(d=>d.mes))]);
   const sel = document.getElementById('filtroMes');
   const cur = sel.value;
   sel.innerHTML = '<option value="">Mais recente</option>' +
@@ -816,7 +870,7 @@ function renderList(data){
             <div class="meta-detail-item"><div class="k">Divisão</div><div class="v" style="color:${dc};font-weight:700">${escHtml(m.unidade)}</div></div>
             <div class="meta-detail-item"><div class="k">Status</div><div class="v"><span class="status-badge ${c.badge}">${m.status}</span></div></div>
           </div>
-          ${diag?`<div class="diagnostico-box"><strong>Diagnóstico / Justificativa:</strong>\n${escHtml(diag)}</div>`:''}
+          ${renderDiagnosticoPorStatus(m)}
           ${m.resumo?`<div class="resumo-box"><strong>Resumo do Cenário:</strong> ${escHtml(m.resumo)}</div>`:''}
           ${m.articulacao&&m.articulacao!=='Nenhuma pendência externa reportada.'?`<div class="motivo-box"><strong>Articulação / Dependências:</strong> ${escHtml(m.articulacao)}</div>`:''}
           <div class="meta-actions">
@@ -830,6 +884,74 @@ function renderList(data){
   });
   if(!html) html = `<div class="empty-state"><span class="big-icon">🎯</span>Nenhuma meta encontrada com os filtros aplicados.</div>`;
   document.getElementById('metasList').innerHTML = html;
+}
+
+function aliasDiagLabel(label){
+  const n = String(label||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+  if(n==='fase') return 'fase';
+  if(n==='andamento') return 'andamento';
+  if(n==='acoes do mes' || n==='acao do mes') return 'acoesMes';
+  if(n==='cronograma') return 'cronograma';
+  if(n==='motivo do atraso' || n==='motivo atraso') return 'motivoAtraso';
+  if(n==='motivo de nao ter sido iniciada' || n==='motivo nao iniciada' || n==='motivo de nao inicio') return 'motivoNaoIniciada';
+  return '';
+}
+
+function extractDiagnosticSections(text){
+  const source = String(text||'').replace(/\r\n/g,'\n').trim();
+  const sections = {};
+  if(!source) return sections;
+  const re = /(?:^|\n)\s*(Fase|Andamento|Ações do mês|Acoes do mes|Ação do mês|Acao do mes|Cronograma|Motivo do atraso|Motivo atraso|Motivo de não ter sido iniciada|Motivo de nao ter sido iniciada|Motivo não iniciada|Motivo nao iniciada|Motivo de não início|Motivo de nao inicio)\s*[:\-–—]\s*/gi;
+  const matches = [...source.matchAll(re)];
+  if(!matches.length){ sections._geral = source; return sections; }
+  matches.forEach((match, idx)=>{
+    const key = aliasDiagLabel(match[1]);
+    if(!key) return;
+    const start = match.index + match[0].length;
+    const end = idx+1<matches.length ? matches[idx+1].index : source.length;
+    const value = source.slice(start,end).trim();
+    if(value) sections[key] = value;
+  });
+  return sections;
+}
+
+function renderDiagSection(title, value, cls){
+  const safeValue = value ? escHtml(value) : 'Não informado no Excel.';
+  return `<div class="diagnostico-section ${cls}"><strong>${title}</strong>${safeValue}</div>`;
+}
+
+function renderDiagnosticoPorStatus(m){
+  const status = m.status || '';
+  const sections = extractDiagnosticSections(m.diagnostico||'');
+  if(sections._geral){
+    if(status==='Em andamento') sections.andamento = sections._geral;
+    else if(status==='Atrasada') sections.motivoAtraso = sections._geral;
+    else if(status==='Não iniciada') sections.motivoNaoIniciada = sections._geral;
+    else sections.andamento = sections._geral;
+  }
+  if(status==='Em andamento'){
+    return `<div class="diagnostico-grid">
+      ${renderDiagSection('Fase', sections.fase, 'ea')}
+      ${renderDiagSection('Andamento', sections.andamento, 'ea')}
+      ${renderDiagSection('Ações do mês', sections.acoesMes, 'ea')}
+      ${renderDiagSection('Cronograma', sections.cronograma, 'ea')}
+    </div>`;
+  }
+  if(status==='Atrasada'){
+    return `<div class="diagnostico-grid">
+      ${renderDiagSection('Motivo do atraso', sections.motivoAtraso, 'at')}
+      ${renderDiagSection('Andamento', sections.andamento, 'at')}
+    </div>`;
+  }
+  if(status==='Não iniciada'){
+    return `<div class="diagnostico-grid">
+      ${renderDiagSection('Motivo de não ter sido iniciada', sections.motivoNaoIniciada, 'ni')}
+    </div>`;
+  }
+  if(m.diagnostico){
+    return `<div class="diagnostico-grid">${renderDiagSection('Diagnóstico / Justificativa', sections.andamento || sections._geral || m.diagnostico, '')}</div>`;
+  }
+  return '';
 }
 
 function toggleMeta(bid){
@@ -1094,7 +1216,7 @@ function renderReplaceStep(){
     title.textContent='Upload do novo Excel — etapa 3 de 3';
     body.innerHTML=steps+`
       <div class="alert-box alert-info">
-        <strong>✅ Confirmado.</strong> Faça o upload do novo Excel com as metas do novo ciclo de monitoramento.
+        <strong>✅ Confirmado.</strong> Faça o upload do novo Excel com as metas do novo ciclo de monitoramento. O mês de monitoramento será perguntado antes da importação.
       </div>
       <p style="font-size:13px;color:#374151;margin-bottom:14px">O arquivo deve seguir a estrutura do modelo padrão com as colunas: Diretoria, Mês, Meta, Status, Diagnóstico, Resumo, Responsável e Articulação.</p>
       <label class="btn btn-primary" for="replaceInput" style="display:inline-flex;cursor:pointer">⬆ Selecionar novo Excel</label>`;
@@ -1105,6 +1227,12 @@ function renderReplaceStep(){
 
 function handleReplace(input){
   const file = input.files[0]; if(!file) return;
+  const mesMonitoramento = askMonitoringMonth();
+  if(!mesMonitoramento){
+    input.value='';
+    showToast('Substituição cancelada: é obrigatório informar o mês de monitoramento.','error');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = e=>{
     try{
@@ -1117,11 +1245,12 @@ function handleReplace(input){
       historyData.push(...allData.map(d=>({...d,ano})));
       allData = [];
       // Load new
-      parseRows(rows, true);
+      const total = parseRows(rows, true, mesMonitoramento);
       closeReplaceModal();
       populateFilters();
+      document.getElementById('filtroMes').value = mesMonitoramento;
       render();
-      showToast(`Metas substituídas! ${allData.length} novas metas carregadas. Histórico arquivado.`,'success');
+      showToast(`Metas substituídas! ${total} novas metas carregadas para ${mesMonitoramento}. Histórico arquivado.`,'success');
     } catch(err){ showToast('Erro ao ler o arquivo: '+err.message,'error'); }
   };
   reader.readAsBinaryString(file);
@@ -1129,8 +1258,26 @@ function handleReplace(input){
 }
 
 // ===== IMPORT EXCEL =====
+function askMonitoringMonth(){
+  const lista = MESES.join(', ');
+  while(true){
+    const resposta = window.prompt('A qual mês de monitoramento esta planilha corresponde?\n\nInforme um mês válido: '+lista);
+    if(resposta===null) return '';
+    const mes = normalizeMonth(resposta);
+    if(MESES.includes(mes)) return mes;
+    window.alert('Mês inválido. Informe um dos meses: '+lista+'.');
+  }
+}
+
+// ===== IMPORT EXCEL =====
 function handleXLSX(input){
   const file = input.files[0]; if(!file) return;
+  const mesMonitoramento = askMonitoringMonth();
+  if(!mesMonitoramento){
+    input.value='';
+    showToast('Importação cancelada: é obrigatório informar o mês de monitoramento.','error');
+    return;
+  }
   const reader = new FileReader();
   reader.onload = e=>{
     try{
@@ -1138,10 +1285,11 @@ function handleXLSX(input){
       const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
       const ws = wb.Sheets[wsName];
       const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-      parseRows(rows, true);
+      const total = parseRows(rows, true, mesMonitoramento);
       populateFilters();
+      document.getElementById('filtroMes').value = mesMonitoramento;
       render();
-      showToast(`Importação concluída! ${rows.length} registros processados.`,'success');
+      showToast(`Importação concluída! ${total} registros associados a ${mesMonitoramento}.`,'success');
     } catch(err){ showToast('Erro ao importar: '+err.message,'error'); }
   };
   reader.readAsBinaryString(file);
@@ -1150,17 +1298,9 @@ function handleXLSX(input){
 
 // ===== DOWNLOAD TEMPLATE =====
 function downloadTemplate(){
-  try{
-    const bin = atob(EXCEL_B64);
-    const bytes = new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-    const blob = new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'Modelo_Padrão_Metas_CODAE.xlsx';
-    a.click();
-    showToast('Modelo Excel baixado com sucesso!','success');
-  } catch(e){ showToast('Erro ao baixar modelo.','error'); }
+  const url = 'https://smeprefeituraspgov-my.sharepoint.com/:f:/g/personal/larissaf_silva_sme_prefeitura_sp_gov_br/IgDifjmuAiM2TZmkiZh7ECUjAX3w7SoyvJ80vfLdKvLDTjA?e=02dV8v';
+  window.open(url, '_blank', 'noopener,noreferrer');
+  showToast('Abrindo modelo padrão de Excel em nova aba.','success');
 }
 
 // ===== TOAST =====
@@ -1190,17 +1330,3 @@ loadInitialData();
 </script>
 </body>
 </html>
-"""
-
-# Inject excel b64
-html = html.replace('EXCEL_PLACEHOLDER', b64)
-
-with open('/mnt/user-data/outputs/painel_metas_codae.html', 'w', encoding='utf-8') as f:
-    f.write(html)
-
-print('Done! Size:', len(html))
-PYEOF
-python3 /home/claude/build_painel.py
-Saída
-
-Done! Size: 73527
