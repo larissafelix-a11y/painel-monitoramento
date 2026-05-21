@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -8,6 +9,7 @@
 <title>Painel de Metas CODAE</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh}
@@ -611,61 +613,144 @@ let pieCI = null, barCI = null, lineCI = null;
 
 function uid(){ return Math.random().toString(36).slice(2,11); }
 
-// ===== PERSISTÊNCIA LOCAL =====
-// Mantém as informações importadas mesmo após atualizar a página.
-// Esta persistência usa o navegador do usuário e não altera o layout do painel.
-const STORAGE_KEY = 'painel_metas_codae_dados_v1';
-const STORAGE_HISTORY_KEY = 'painel_metas_codae_historico_v1';
+// ===== SUPABASE =====
+// Para uso em equipe/publicado: rode o SQL no Supabase e cole abaixo a URL e a anon public key.
+// Caminho no Supabase: Project Settings > API.
+const SUPABASE_URL = "https://uejqiazrirsrizdvnbxt.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_H8PN641muBNGP6S5gfxQ3w_PL6tp-1e";
+const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
-function salvarPersistencia(){
+function supabaseConfigurado(){
+  return !!(supabaseClient && SUPABASE_URL && SUPABASE_ANON_KEY &&
+    !SUPABASE_URL.includes('COLE_AQUI') && !SUPABASE_ANON_KEY.includes('COLE_AQUI'));
+}
+
+function anoAtual(){ return new Date().getFullYear(); }
+
+function normalizarRegistroSupabase(item){
+  return {
+    id: item.id || uid(),
+    ano: item.ano || anoAtual(),
+    mes: normalizeMonth(item.mes) || '',
+    unidade: normUnit(item.unidade) || item.unidade || '',
+    meta: item.meta || '',
+    status: normStatus(item.status),
+    responsavel: item.responsavel || '',
+    diagnostico: item.diagnostico || '',
+    resumo: item.resumo || '',
+    articulacao: item.articulacao || '',
+    fase: item.fase || '',
+    andamento: item.andamento || '',
+    acoes_do_mes: item.acoes_do_mes || '',
+    cronograma: item.cronograma || '',
+    motivo_atraso: item.motivo_atraso || '',
+    motivo_nao_iniciada: item.motivo_nao_iniciada || ''
+  };
+}
+
+function extrairCamposEstruturados(diagnostico, status){
+  const sections = extractDiagnosticSections(diagnostico || '');
+  if(sections._geral){
+    if(status === 'Em andamento') sections.andamento = sections._geral;
+    else if(status === 'Atrasada') sections.motivoAtraso = sections._geral;
+    else if(status === 'Não iniciada') sections.motivoNaoIniciada = sections._geral;
+    else sections.andamento = sections._geral;
+  }
+  return {
+    fase: sections.fase || null,
+    andamento: sections.andamento || null,
+    acoes_do_mes: sections.acoesMes || null,
+    cronograma: sections.cronograma || null,
+    motivo_atraso: sections.motivoAtraso || null,
+    motivo_nao_iniciada: sections.motivoNaoIniciada || null
+  };
+}
+
+function montarPayloadMeta(obj){
+  const status = normStatus(obj.status);
+  const estruturados = extrairCamposEstruturados(obj.diagnostico || '', status);
+  return {
+    ano: Number(obj.ano) || anoAtual(),
+    mes: normalizeMonth(obj.mes),
+    unidade: normUnit(obj.unidade),
+    meta: String(obj.meta || '').trim(),
+    status,
+    responsavel: obj.responsavel || null,
+    diagnostico: obj.diagnostico || null,
+    resumo: obj.resumo || null,
+    articulacao: obj.articulacao || null,
+    fase: estruturados.fase,
+    andamento: estruturados.andamento,
+    acoes_do_mes: estruturados.acoes_do_mes,
+    cronograma: estruturados.cronograma,
+    motivo_atraso: estruturados.motivo_atraso,
+    motivo_nao_iniciada: estruturados.motivo_nao_iniciada,
+    ativo: true
+  };
+}
+
+async function carregarDadosSupabase(){
+  if(!supabaseConfigurado()){
+    populateFilters();
+    render();
+    showToast('Configure a URL e a chave pública do Supabase no HTML.', 'error');
+    return;
+  }
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(allData || []));
-    localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(historyData || []));
+    const { data, error } = await supabaseClient
+      .from('vw_metas_codae_painel')
+      .select('*')
+      .order('ano', { ascending: true });
+    if(error) throw error;
+    allData = (data || []).map(normalizarRegistroSupabase).filter(d=>d.mes && d.unidade && d.meta);
+    populateFilters();
+    render();
   }catch(e){
-    console.error('Erro ao salvar dados no navegador:', e);
-    showToast('Não foi possível salvar os dados no navegador.', 'error');
+    console.error('Erro ao carregar dados do Supabase:', e);
+    showToast('Erro ao carregar dados do Supabase. Confira se o SQL foi rodado e se a URL/chave estão corretas.', 'error');
+    populateFilters();
+    render();
   }
 }
 
-function carregarPersistencia(){
+async function carregarHistoricoSupabase(){
+  if(!supabaseConfigurado()) return;
   try{
-    const saved = localStorage.getItem(STORAGE_KEY);
-    const savedHistory = localStorage.getItem(STORAGE_HISTORY_KEY);
-    if(saved){
-      const parsed = JSON.parse(saved);
-      if(Array.isArray(parsed)){
-        allData = parsed.map(d=>({
-          id: d.id || uid(),
-          mes: normalizeMonth(d.mes) || '',
-          unidade: normUnit(d.unidade) || d.unidade || '',
-          meta: d.meta || '',
-          status: normStatus(d.status),
-          responsavel: d.responsavel || '',
-          diagnostico: d.diagnostico || '',
-          resumo: d.resumo || '',
-          articulacao: d.articulacao || ''
-        })).filter(d=>d.mes && d.unidade && d.meta);
-      }
-    }
-    if(savedHistory){
-      const parsedHistory = JSON.parse(savedHistory);
-      if(Array.isArray(parsedHistory)) historyData = parsedHistory;
-    }
-    return allData.length > 0 || historyData.length > 0;
+    const { data, error } = await supabaseClient
+      .from('historico_metas_codae')
+      .select('*')
+      .order('arquivado_em', { ascending: false });
+    if(error) throw error;
+    historyData = (data || []).map(normalizarRegistroSupabase);
   }catch(e){
-    console.error('Erro ao carregar dados salvos no navegador:', e);
+    console.error('Erro ao carregar histórico do Supabase:', e);
+  }
+}
+
+async function inserirMetasSupabase(metas){
+  if(!supabaseConfigurado()){
+    showToast('Configure o Supabase no HTML antes de importar.', 'error');
+    return false;
+  }
+  if(!metas.length){
+    showToast('Nenhuma meta válida encontrada no Excel.', 'error');
+    return false;
+  }
+  try{
+    const payload = metas.map(montarPayloadMeta);
+    const { error } = await supabaseClient.from('metas_codae').insert(payload);
+    if(error) throw error;
+    return true;
+  }catch(e){
+    console.error('Erro ao salvar metas no Supabase:', e);
+    showToast('Erro ao salvar metas no Supabase: '+(e.message || e), 'error');
     return false;
   }
 }
 
-function limparPersistencia(){
-  localStorage.removeItem(STORAGE_KEY);
-  localStorage.removeItem(STORAGE_HISTORY_KEY);
-  allData = [];
-  historyData = [];
-  populateFilters();
-  render();
-  showToast('Dados locais apagados com sucesso.', 'success');
+async function iniciarPainel(){
+  await carregarHistoricoSupabase();
+  await carregarDadosSupabase();
 }
 
 // Normalize status from excel
@@ -690,32 +775,33 @@ function normUnit(u){
 
 // ===== LOAD INITIAL DATA FROM EXCEL =====
 function loadInitialData(){
-  const hasSavedData = carregarPersistencia();
-  if(hasSavedData){
-    populateFilters();
-    render();
-    return;
-  }
+  iniciarPainel();
+}
 
-  const b64 = EXCEL_B64;
-  if(!b64){ populateFilters(); render(); return; }
-  try {
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
-    const wb = XLSX.read(bytes, {type:'array'});
-    const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
-    const ws = wb.Sheets[wsName];
-    const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
-    parseRows(rows, true);
-    salvarPersistencia();
-    populateFilters();
-    render();
-  } catch(e){
-    console.error('Erro ao carregar dados iniciais:',e);
-    populateFilters();
-    render();
-  }
+function parseRowsParaSupabase(rows, mesMonitoramento=''){
+  const parsed = [];
+  const mesForcado = normalizeMonth(mesMonitoramento);
+  rows.forEach(r=>{
+    const unit = normUnit(getCell(r, ['Diretoria','diretoria','Unidade','unidade','Divisão','Divisao','divisao']));
+    const meta = String(getCell(r, ['Meta','meta','Descrição da Meta','Descricao da Meta'])).trim();
+    if(!unit||!meta) return;
+    const status = normStatus(getCell(r, ['Status','status','Situação','Situacao']));
+    const mesOriginal = getCell(r, ['Mês','Mes','mes','Mês de Referência','Mes de Referencia','Mês Referência','Mes Referencia']);
+    const mes = mesForcado || normalizeMonth(mesOriginal);
+    if(!mes) return;
+    parsed.push({
+      ano: anoAtual(),
+      mes,
+      unidade: unit,
+      meta,
+      status,
+      responsavel: String(getCell(r, ['Responsável','Responsavel','responsavel'])).trim(),
+      diagnostico: String(getCell(r, ['Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico','diagnostico','Justificativa','justificativa'])).trim(),
+      resumo: String(getCell(r, ['Resumo do Cenário','Resumo do Cenario','Resumo','resumo'])).trim(),
+      articulacao: String(getCell(r, ['Articulação / Dependências','Articulacao / Dependencias','Articulação','Articulacao','articulacao','Dependências','Dependencias'])).trim()
+    });
+  });
+  return parsed;
 }
 
 function getCell(row, names){
@@ -1200,7 +1286,7 @@ function onMetaSelect(){
   if(sel.value){ inp.value = sel.value; }
 }
 
-function saveMeta(){
+async function saveMeta(){
   const mes = document.getElementById('f_mes').value.trim();
   const unidade = document.getElementById('f_unidade').value.trim();
   const meta = document.getElementById('f_meta').value.trim() || document.getElementById('f_meta_select').value;
@@ -1208,34 +1294,53 @@ function saveMeta(){
   if(!mes){showToast('Informe o mês de referência.','error');return;}
   if(!unidade){showToast('Selecione a divisão.','error');return;}
   if(!meta){showToast('Preencha a descrição da meta.','error');return;}
-  const obj = {
-    id: editingId||uid(), mes, unidade, meta, status,
+
+  const obj = montarPayloadMeta({
+    mes, unidade, meta, status,
     responsavel: document.getElementById('f_responsavel').value.trim(),
     diagnostico: document.getElementById('f_diagnostico').value.trim(),
     resumo: document.getElementById('f_resumo').value.trim(),
     articulacao: document.getElementById('f_articulacao').value.trim()
-  };
-  if(editingId){
-    const i = allData.findIndex(d=>d.id===editingId);
-    if(i>=0) allData[i]=obj;
-    showToast('Meta atualizada com sucesso!','success');
-  } else {
-    allData.push(obj);
-    showToast('Meta adicionada com sucesso!','success');
+  });
+
+  if(!supabaseConfigurado()){
+    showToast('Configure o Supabase no HTML antes de salvar.', 'error');
+    return;
   }
-  salvarPersistencia();
-  closeMetaModal();
-  populateFilters();
-  render();
+
+  try{
+    if(editingId){
+      const { error } = await supabaseClient.from('metas_codae').update(obj).eq('id', editingId);
+      if(error) throw error;
+      showToast('Meta atualizada com sucesso no Supabase!','success');
+    } else {
+      const { error } = await supabaseClient.from('metas_codae').insert([obj]);
+      if(error) throw error;
+      showToast('Meta adicionada com sucesso no Supabase!','success');
+    }
+    closeMetaModal();
+    await carregarDadosSupabase();
+  }catch(e){
+    console.error('Erro ao salvar meta no Supabase:', e);
+    showToast('Erro ao salvar meta no Supabase: '+(e.message || e), 'error');
+  }
 }
 
-function deleteMeta(id){
-  if(!confirm('Remover esta meta definitivamente?')) return;
-  allData = allData.filter(d=>d.id!==id);
-  salvarPersistencia();
-  populateFilters();
-  render();
-  showToast('Meta removida.','success');
+async function deleteMeta(id){
+  if(!confirm('Remover esta meta do painel?')) return;
+  if(!supabaseConfigurado()){
+    showToast('Configure o Supabase no HTML antes de remover.', 'error');
+    return;
+  }
+  try{
+    const { error } = await supabaseClient.from('metas_codae').update({ativo:false}).eq('id', id);
+    if(error) throw error;
+    await carregarDadosSupabase();
+    showToast('Meta removida do painel.','success');
+  }catch(e){
+    console.error('Erro ao remover meta no Supabase:', e);
+    showToast('Erro ao remover meta no Supabase: '+(e.message || e), 'error');
+  }
 }
 
 // ===== REPLACE MODAL =====
@@ -1294,7 +1399,7 @@ function renderReplaceStep(){
   }
 }
 
-function handleReplace(input){
+async function handleReplace(input){
   const file = input.files[0]; if(!file) return;
   const mesMonitoramento = askMonitoringMonth();
   if(!mesMonitoramento){
@@ -1303,25 +1408,32 @@ function handleReplace(input){
     return;
   }
   const reader = new FileReader();
-  reader.onload = e=>{
+  reader.onload = async e=>{
     try{
       const wb = XLSX.read(e.target.result,{type:'binary'});
       const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
       const ws = wb.Sheets[wsName];
       const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-      // Archive current
-      const ano = new Date().getFullYear();
-      historyData.push(...allData.map(d=>({...d,ano})));
-      allData = [];
-      // Load new
-      const total = parseRows(rows, true, mesMonitoramento);
-      salvarPersistencia();
+      const metas = parseRowsParaSupabase(rows, mesMonitoramento);
+      if(!metas.length){ showToast('Nenhuma meta válida encontrada no Excel.','error'); return; }
+      if(!supabaseConfigurado()){
+        showToast('Configure o Supabase no HTML antes de substituir metas.', 'error');
+        return;
+      }
+      const { error: rpcError } = await supabaseClient.rpc('arquivar_ciclo_atual_codae');
+      if(rpcError) throw rpcError;
+      const ok = await inserirMetasSupabase(metas);
+      if(!ok) return;
       closeReplaceModal();
-      populateFilters();
+      await carregarHistoricoSupabase();
+      await carregarDadosSupabase();
       document.getElementById('filtroMes').value = mesMonitoramento;
       render();
-      showToast(`Metas substituídas! ${total} novas metas carregadas para ${mesMonitoramento}. Histórico arquivado.`,'success');
-    } catch(err){ showToast('Erro ao ler o arquivo: '+err.message,'error'); }
+      showToast(`Metas substituídas! ${metas.length} novas metas salvas para ${mesMonitoramento}. Histórico arquivado.`,'success');
+    } catch(err){
+      console.error('Erro ao substituir metas:', err);
+      showToast('Erro ao substituir metas: '+(err.message || err),'error');
+    }
   };
   reader.readAsBinaryString(file);
   input.value='';
@@ -1340,7 +1452,7 @@ function askMonitoringMonth(){
 }
 
 // ===== IMPORT EXCEL =====
-function handleXLSX(input){
+async function handleXLSX(input){
   const file = input.files[0]; if(!file) return;
   const mesMonitoramento = askMonitoringMonth();
   if(!mesMonitoramento){
@@ -1349,19 +1461,23 @@ function handleXLSX(input){
     return;
   }
   const reader = new FileReader();
-  reader.onload = e=>{
+  reader.onload = async e=>{
     try{
       const wb = XLSX.read(e.target.result,{type:'binary'});
       const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
       const ws = wb.Sheets[wsName];
       const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-      const total = parseRows(rows, true, mesMonitoramento);
-      salvarPersistencia();
-      populateFilters();
+      const metas = parseRowsParaSupabase(rows, mesMonitoramento);
+      const ok = await inserirMetasSupabase(metas);
+      if(!ok) return;
+      await carregarDadosSupabase();
       document.getElementById('filtroMes').value = mesMonitoramento;
       render();
-      showToast(`Importação concluída! ${total} registros associados a ${mesMonitoramento}.`,'success');
-    } catch(err){ showToast('Erro ao importar: '+err.message,'error'); }
+      showToast(`Importação concluída! ${metas.length} registros salvos no Supabase para ${mesMonitoramento}.`,'success');
+    } catch(err){
+      console.error('Erro ao importar:', err);
+      showToast('Erro ao importar: '+(err.message || err),'error');
+    }
   };
   reader.readAsBinaryString(file);
   input.value='';
