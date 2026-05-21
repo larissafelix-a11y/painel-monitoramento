@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -610,6 +611,63 @@ let pieCI = null, barCI = null, lineCI = null;
 
 function uid(){ return Math.random().toString(36).slice(2,11); }
 
+// ===== PERSISTÊNCIA LOCAL =====
+// Mantém as informações importadas mesmo após atualizar a página.
+// Esta persistência usa o navegador do usuário e não altera o layout do painel.
+const STORAGE_KEY = 'painel_metas_codae_dados_v1';
+const STORAGE_HISTORY_KEY = 'painel_metas_codae_historico_v1';
+
+function salvarPersistencia(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(allData || []));
+    localStorage.setItem(STORAGE_HISTORY_KEY, JSON.stringify(historyData || []));
+  }catch(e){
+    console.error('Erro ao salvar dados no navegador:', e);
+    showToast('Não foi possível salvar os dados no navegador.', 'error');
+  }
+}
+
+function carregarPersistencia(){
+  try{
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const savedHistory = localStorage.getItem(STORAGE_HISTORY_KEY);
+    if(saved){
+      const parsed = JSON.parse(saved);
+      if(Array.isArray(parsed)){
+        allData = parsed.map(d=>({
+          id: d.id || uid(),
+          mes: normalizeMonth(d.mes) || '',
+          unidade: normUnit(d.unidade) || d.unidade || '',
+          meta: d.meta || '',
+          status: normStatus(d.status),
+          responsavel: d.responsavel || '',
+          diagnostico: d.diagnostico || '',
+          resumo: d.resumo || '',
+          articulacao: d.articulacao || ''
+        })).filter(d=>d.mes && d.unidade && d.meta);
+      }
+    }
+    if(savedHistory){
+      const parsedHistory = JSON.parse(savedHistory);
+      if(Array.isArray(parsedHistory)) historyData = parsedHistory;
+    }
+    return allData.length > 0 || historyData.length > 0;
+  }catch(e){
+    console.error('Erro ao carregar dados salvos no navegador:', e);
+    return false;
+  }
+}
+
+function limparPersistencia(){
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(STORAGE_HISTORY_KEY);
+  allData = [];
+  historyData = [];
+  populateFilters();
+  render();
+  showToast('Dados locais apagados com sucesso.', 'success');
+}
+
 // Normalize status from excel
 function normStatus(s){
   if(!s) return 'Não iniciada';
@@ -632,6 +690,13 @@ function normUnit(u){
 
 // ===== LOAD INITIAL DATA FROM EXCEL =====
 function loadInitialData(){
+  const hasSavedData = carregarPersistencia();
+  if(hasSavedData){
+    populateFilters();
+    render();
+    return;
+  }
+
   const b64 = EXCEL_B64;
   if(!b64){ populateFilters(); render(); return; }
   try {
@@ -643,6 +708,7 @@ function loadInitialData(){
     const ws = wb.Sheets[wsName];
     const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
     parseRows(rows, true);
+    salvarPersistencia();
     populateFilters();
     render();
   } catch(e){
@@ -1157,6 +1223,7 @@ function saveMeta(){
     allData.push(obj);
     showToast('Meta adicionada com sucesso!','success');
   }
+  salvarPersistencia();
   closeMetaModal();
   populateFilters();
   render();
@@ -1165,6 +1232,8 @@ function saveMeta(){
 function deleteMeta(id){
   if(!confirm('Remover esta meta definitivamente?')) return;
   allData = allData.filter(d=>d.id!==id);
+  salvarPersistencia();
+  populateFilters();
   render();
   showToast('Meta removida.','success');
 }
@@ -1246,6 +1315,7 @@ function handleReplace(input){
       allData = [];
       // Load new
       const total = parseRows(rows, true, mesMonitoramento);
+      salvarPersistencia();
       closeReplaceModal();
       populateFilters();
       document.getElementById('filtroMes').value = mesMonitoramento;
@@ -1286,6 +1356,7 @@ function handleXLSX(input){
       const ws = wb.Sheets[wsName];
       const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
       const total = parseRows(rows, true, mesMonitoramento);
+      salvarPersistencia();
       populateFilters();
       document.getElementById('filtroMes').value = mesMonitoramento;
       render();
