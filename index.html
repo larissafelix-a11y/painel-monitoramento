@@ -4,6 +4,8 @@
 
 
 
+
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -500,6 +502,30 @@ body[data-theme="dark"] .diagnostico-section.ea{background:#0b2338;border-color:
 body[data-theme="dark"] .diagnostico-section.at{background:#331616;border-color:#7f1d1d;color:#fecaca}
 body[data-theme="dark"] .diagnostico-section.ni{background:#18181b;border-color:#3f3f46;color:#e4e4e7}
 
+
+
+/* ===== ADAPTAÇÃO AO EXCEL CONSOLIDADO 2026 ===== */
+.alert-badge{font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;border:1px solid #d1d5db;background:#f9fafb;color:#374151;white-space:nowrap}
+.alert-badge.alto{background:#fee2e2;color:#991b1b;border-color:#fca5a5}
+.alert-badge.medio{background:#fffbeb;color:#92400e;border-color:#fcd34d}
+.alert-badge.regular,.alert-badge.baixo{background:#ecfdf5;color:#166534;border-color:#bbf7d0}
+.risk-panel{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;margin-bottom:18px}
+.risk-panel h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:10px}
+.risk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.risk-card{border:1px solid #e5e7eb;border-left:4px solid #b21f2d;border-radius:8px;padding:10px 12px;background:#fff;font-size:12px;line-height:1.45}
+.risk-card .risk-title{font-weight:700;color:#1a1a2e;margin-bottom:4px}
+.table-preview{max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}
+.meta-history-mini{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:14px}
+.meta-history-mini h4{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:8px}
+.meta-history-line{display:grid;grid-template-columns:88px 1fr;gap:8px;font-size:12px;padding:7px 0;border-top:1px solid #eef0f3}
+.meta-history-line:first-of-type{border-top:0}
+.meta-history-line strong{color:#1a1a2e}
+body[data-theme="dark"] .risk-panel,
+body[data-theme="dark"] .risk-card,
+body[data-theme="dark"] .meta-history-mini{background:#111827;border-color:#273449;color:#e5e7eb}
+body[data-theme="dark"] .risk-card .risk-title,
+body[data-theme="dark"] .meta-history-line strong{color:#f9fafb}
+
 </style>
 </head>
 <body>
@@ -589,6 +615,30 @@ body[data-theme="dark"] .diagnostico-section.ni{background:#18181b;border-color:
       </select>
     </div>
     <div class="filter-group">
+      <label>Alerta</label>
+      <select id="filtroAlerta" class="form-select" onchange="onFilterChange()"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Responsável</label>
+      <select id="filtroResponsavel" class="form-select" onchange="onFilterChange()"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Prioridade</label>
+      <select id="filtroPrioridade" class="form-select" onchange="onFilterChange()"><option value="">Todas</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Risco</label>
+      <select id="filtroRisco" class="form-select" onchange="onFilterChange()"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Cronograma</label>
+      <select id="filtroCronograma" class="form-select" onchange="onFilterChange()"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
+      <label>Apoio institucional</label>
+      <select id="filtroApoio" class="form-select" onchange="onFilterChange()"><option value="">Todos</option></select>
+    </div>
+    <div class="filter-group">
       <label>Buscar meta</label>
       <input type="text" id="filtroBusca" placeholder="Pesquisar por nome..." oninput="onFilterChange()">
     </div>
@@ -596,6 +646,9 @@ body[data-theme="dark"] .diagnostico-section.ni{background:#18181b;border-color:
       <button class="btn btn-outline btn-sm" onclick="clearFilters()">✕ Limpar filtros</button>
     </div>
   </div>
+
+  <!-- Leitura gerencial de riscos e justificativas -->
+  <div id="riskPanelContent"></div>
 
   <!-- Metas List -->
   <div id="metasList"></div>
@@ -2144,6 +2197,504 @@ document.addEventListener('click', e=>{
 document.addEventListener('keydown', e=>{
   if(e.key==='Escape'){ closeMetaModal(); closeReplaceModal(); cancelExcelPeriodModal(); closeExcelManagerModal(); closeDeleteYearModal(); closeHistoryMetaModal(); }
 });
+
+
+
+// ===== ADAPTAÇÃO AO EXCEL CONSOLIDADO 2026 =====
+let resumoDiretoriaData = [];
+let justificativasRiscosData = [];
+let baseConsolidadaData = [];
+let listasPainelData = {};
+let arquivoConsolidadoAtivo = false;
+if(!STATUS_MAP['Não informado']) STATUS_MAP['Não informado'] = {cls:'ni',badge:'badge-ni',fill:'fill-ni',color:'#5a5a6a'};
+try{ if(!STATUS_ORDER.includes('Não informado')) STATUS_ORDER.push('Não informado'); }catch(e){}
+
+function normalizaChavePlanilha(v){
+  return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[\s_\/\\-]+/g,' ');
+}
+function getCellFlex(row, nomes){
+  if(!row) return '';
+  for(const nome of nomes){
+    if(Object.prototype.hasOwnProperty.call(row,nome) && row[nome]!==undefined && row[nome]!==null) return row[nome];
+  }
+  const mapa = {};
+  Object.keys(row).forEach(k=>{ mapa[normalizaChavePlanilha(k)] = row[k]; });
+  for(const nome of nomes){
+    const nk = normalizaChavePlanilha(nome);
+    if(Object.prototype.hasOwnProperty.call(mapa,nk)) return mapa[nk];
+  }
+  return '';
+}
+function primeiraAba(wb, nomes){
+  const alvo = nomes.map(normalizaChavePlanilha);
+  return wb.SheetNames.find(n=>alvo.includes(normalizaChavePlanilha(n))) || '';
+}
+function sheetJson(wb, name){
+  if(!name || !wb.Sheets[name]) return [];
+  return XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:''});
+}
+function normStatusConsolidado(s){
+  if(!String(s||'').trim()) return 'Não informado';
+  const t = normalizarTextoBusca(s);
+  if(t.includes('concluid')) return 'Concluída';
+  if(t.includes('andamento')) return 'Em andamento';
+  if(t.includes('atrasad')) return 'Atrasada';
+  if(t.includes('nao iniciad') || t.includes('não iniciad')) return 'Não iniciada';
+  if(t.includes('nao informad') || t.includes('não informad')) return 'Não informado';
+  return String(s||'').trim();
+}
+function normAlerta(v){
+  const t = String(v||'').trim();
+  if(!t) return 'Não informado';
+  const n = normalizarTextoBusca(t);
+  if(n.includes('alto')) return 'Alto';
+  if(n.includes('medio')) return 'Médio';
+  if(n.includes('baixo')) return 'Baixo';
+  if(n.includes('regular')) return 'Regular';
+  return t;
+}
+function boolTexto(v){
+  const t = normalizarTextoBusca(v);
+  if(!t) return 'Não informado';
+  if(['sim','s','true','1','necessario','necessária','necessario apoio','com apoio'].some(x=>t.includes(normalizarTextoBusca(x)))) return 'Sim';
+  if(['nao','não','n','false','0','nenhum','sem apoio'].some(x=>t.includes(normalizarTextoBusca(x)))) return 'Não';
+  return String(v||'').trim();
+}
+function codigoDescricao(row){
+  const codigo = String(getCellFlex(row,['Código da meta','Codigo da meta','Código meta','Codigo meta','Código','Codigo'])).trim();
+  const desc = String(getCellFlex(row,['Descrição da meta','Descricao da meta','Meta','Descrição','Descricao'])).trim();
+  const meta = codigo && desc && !desc.startsWith(codigo) ? `${codigo}. ${desc}` : (desc || codigo);
+  return {codigo, desc, meta};
+}
+function mapVisaoPorMeta(row, mesForcado='', anoAnalise=anoAtual()){
+  const cd = codigoDescricao(row);
+  const mesOrig = getCellFlex(row,['Mês mais recente','Mes mais recente','Mês monitoramento','Mes monitoramento','Mês','Mes']);
+  return {
+    id: uid(),
+    ano: Number(anoAnalise)||anoAtual(),
+    mes: normalizeMonth(mesForcado) || normalizeMonth(mesOrig) || '',
+    mes_ordem: Number(getCellFlex(row,['Mês ordem','Mes ordem'])) || 0,
+    unidade: normUnit(getCellFlex(row,['Diretoria','Unidade','Divisão','Divisao'])) || 'CODAE',
+    codigo_meta: cd.codigo || extrairCodigoMeta(cd.meta),
+    descricao_meta: cd.desc || cd.meta,
+    meta: cd.meta,
+    status: normStatusConsolidado(getCellFlex(row,['Status mais recente','Status atual','Status','Situação','Situacao'])),
+    alerta_painel: normAlerta(getCellFlex(row,['Alerta painel','Alerta'])),
+    responsavel: String(getCellFlex(row,['Responsável','Responsavel'])).trim(),
+    prioridade_atual: String(getCellFlex(row,['Prioridade atual','Prioridade'])).trim() || 'Não informado',
+    risco: String(getCellFlex(row,['Risco','Risco da meta','Risco no prazo'])).trim() || 'Não informado',
+    cronograma: String(getCellFlex(row,['Cronograma'])).trim() || 'Não informado',
+    fase: String(getCellFlex(row,['Fase/etapa','Fase etapa','Fase','Etapa atraso'])).trim(),
+    leitura_card: String(getCellFlex(row,['Leitura para card do painel','Leitura card','Leitura gerencial'])).trim(),
+    justificativa_principal: String(getCellFlex(row,['Justificativa principal','Justificativa/Motivo','Justificativa','Motivo atraso','Motivo não iniciada','Motivo nao iniciada'])).trim(),
+    acao_corretiva: String(getCellFlex(row,['Ação corretiva/próxima etapa','Acao corretiva/proxima etapa','Ação corretiva ou próxima etapa','Acoes corretivas','Ações corretivas','Próximas etapas','Proximas etapas','Plano de ação','Plano de acao'])).trim(),
+    apoio_institucional: boolTexto(getCellFlex(row,['Apoio institucional','Com apoio institucional'])),
+    qtd_historico: Number(getCellFlex(row,['Qtde registros históricos','Qtde registros historicos','Quantidade de registros históricos','Registros históricos'])) || 0,
+    diagnostico: String(getCellFlex(row,['Leitura para card do painel','Justificativa principal','Diagnóstico','Diagnostico'])).trim(),
+    resumo: String(getCellFlex(row,['Leitura para card do painel','Resumo do Cenário','Resumo do Cenario','Resumo'])).trim(),
+    articulacao: String(getCellFlex(row,['Apoio institucional','Dependências','Dependencias','Apoio'])).trim(),
+    motivo_atraso: String(getCellFlex(row,['Motivo atraso','Motivo do atraso'])).trim(),
+    motivo_nao_iniciada: String(getCellFlex(row,['Motivo não iniciada','Motivo nao iniciada','Motivo de não ter sido iniciada','Motivo de nao ter sido iniciada'])).trim(),
+    ativo: true,
+    origem_consolidado: true
+  };
+}
+function mapBaseConsolidada(row, mesForcado='', anoAnalise=anoAtual()){
+  const base = mapVisaoPorMeta(row, mesForcado, anoAnalise);
+  base.mes = normalizeMonth(getCellFlex(row,['Mês monitoramento','Mes monitoramento','Mês','Mes'])) || base.mes;
+  base.mes_ordem = Number(getCellFlex(row,['Mês ordem','Mes ordem'])) || MESES.indexOf(base.mes)+1 || 0;
+  base.status = normStatusConsolidado(getCellFlex(row,['Status atual','Status mais recente','Status']));
+  base.motivo_nao_iniciada = String(getCellFlex(row,['Motivo não iniciada','Motivo nao iniciada','Motivo de não ter sido iniciada','Motivo de nao ter sido iniciada'])).trim();
+  base.plano_acao = String(getCellFlex(row,['Plano de ação','Plano de acao'])).trim();
+  base.dependencias = String(getCellFlex(row,['Dependências','Dependencias'])).trim();
+  base.motivo_atraso = String(getCellFlex(row,['Motivo atraso','Motivo do atraso'])).trim();
+  base.etapa_atraso = String(getCellFlex(row,['Etapa atraso'])).trim();
+  base.evolucao_atraso = String(getCellFlex(row,['Evolução atraso','Evolucao atraso'])).trim();
+  base.impacto_resultado = String(getCellFlex(row,['Impacto no resultado'])).trim();
+  base.acoes_corretivas = String(getCellFlex(row,['Ações corretivas','Acoes corretivas'])).trim();
+  base.novo_prazo = String(getCellFlex(row,['Novo prazo'])).trim();
+  base.fase_andamento = String(getCellFlex(row,['Fase andamento','Fase/etapa','Fase etapa'])).trim();
+  base.evolucao_andamento = String(getCellFlex(row,['Evolução andamento','Evolucao andamento'])).trim();
+  base.acoes_do_mes = String(getCellFlex(row,['Ações do mês','Acoes do mes','Ações do mes'])).trim();
+  base.aderencia_resultado = String(getCellFlex(row,['Aderência resultado','Aderencia resultado'])).trim();
+  base.proximas_etapas = String(getCellFlex(row,['Próximas etapas','Proximas etapas'])).trim();
+  base.risco_no_prazo = String(getCellFlex(row,['Risco no prazo'])).trim();
+  base.arquivo_origem = String(getCellFlex(row,['Arquivo origem'])).trim();
+  base.diagnostico = [
+    base.fase_andamento ? `Fase: ${base.fase_andamento}` : '',
+    base.evolucao_andamento ? `Andamento: ${base.evolucao_andamento}` : '',
+    base.acoes_do_mes ? `Ações do mês: ${base.acoes_do_mes}` : '',
+    base.cronograma ? `Cronograma: ${base.cronograma}` : '',
+    base.motivo_atraso ? `Motivo do atraso: ${base.motivo_atraso}` : '',
+    base.motivo_nao_iniciada ? `Motivo de não ter sido iniciada: ${base.motivo_nao_iniciada}` : ''
+  ].filter(Boolean).join('\n') || base.diagnostico;
+  return base;
+}
+function workbookConsolidado(wb){
+  return primeiraAba(wb,['BASE_CONSOLIDADA']) && primeiraAba(wb,['VISAO_POR_META']) && primeiraAba(wb,['RESUMO_DIRETORIA']);
+}
+function parseWorkbookConsolidado(wb, periodo={}){
+  const faltantes = ['BASE_CONSOLIDADA','VISAO_POR_META','RESUMO_DIRETORIA'].filter(n=>!primeiraAba(wb,[n]));
+  if(faltantes.length) throw new Error('O Excel consolidado não possui as abas essenciais: '+faltantes.join(', ')+'.');
+  const abaVisao = primeiraAba(wb,['VISAO_POR_META']);
+  const abaBase = primeiraAba(wb,['BASE_CONSOLIDADA']);
+  const abaResumo = primeiraAba(wb,['RESUMO_DIRETORIA']);
+  const abaRiscos = primeiraAba(wb,['JUSTIFICATIVAS_RISCOS']);
+  const abaListas = primeiraAba(wb,['LISTAS_PAINEL']);
+  const ano = Number(periodo.ano)||anoAtual();
+  const visaoRows = sheetJson(wb,abaVisao);
+  const baseRows = sheetJson(wb,abaBase);
+  const metas = visaoRows.map(r=>mapVisaoPorMeta(r,'',ano)).filter(m=>m.unidade && m.meta);
+  baseConsolidadaData = baseRows.map(r=>mapBaseConsolidada(r,'',ano)).filter(m=>m.unidade && m.meta);
+  resumoDiretoriaData = sheetJson(wb,abaResumo);
+  justificativasRiscosData = abaRiscos ? sheetJson(wb,abaRiscos).map(r=>mapBaseConsolidada(r,'',ano)).filter(m=>m.unidade && m.meta) : [];
+  listasPainelData = abaListas ? {rows:sheetJson(wb,abaListas)} : {};
+  arquivoConsolidadoAtivo = true;
+  localStorage.setItem('painel_codae_consolidado_cache', JSON.stringify({metas, baseConsolidadaData, resumoDiretoriaData, justificativasRiscosData, salvo_em:new Date().toISOString()}));
+  return metas;
+}
+function restaurarCacheConsolidado(){
+  try{
+    const raw = localStorage.getItem('painel_codae_consolidado_cache');
+    if(!raw) return false;
+    const cache = JSON.parse(raw);
+    if(!Array.isArray(cache.metas) || !cache.metas.length) return false;
+    allData = cache.metas;
+    baseConsolidadaData = cache.baseConsolidadaData || [];
+    resumoDiretoriaData = cache.resumoDiretoriaData || [];
+    justificativasRiscosData = cache.justificativasRiscosData || [];
+    arquivoConsolidadoAtivo = true;
+    atualizarMetasPorUnidade();
+    populateFilters();
+    render();
+    return true;
+  }catch(e){ console.warn('Cache consolidado inválido.', e); return false; }
+}
+
+const _normalizarRegistroSupabaseOriginal = normalizarRegistroSupabase;
+normalizarRegistroSupabase = function(item){
+  const r = _normalizarRegistroSupabaseOriginal(item);
+  r.codigo_meta = item.codigo_meta || item.codigo || extrairCodigoMeta(item.meta);
+  r.descricao_meta = item.descricao_meta || item.descricao || r.meta;
+  r.alerta_painel = item.alerta_painel || item.alerta || 'Não informado';
+  r.prioridade_atual = item.prioridade_atual || item.prioridade || 'Não informado';
+  r.risco = item.risco || item.risco_meta || 'Não informado';
+  r.apoio_institucional = item.apoio_institucional || item.apoio || 'Não informado';
+  r.leitura_card = item.leitura_card || r.resumo || '';
+  r.justificativa_principal = item.justificativa_principal || r.diagnostico || '';
+  r.acao_corretiva = item.acao_corretiva || item.proximas_etapas || '';
+  return r;
+};
+
+const _montarPayloadMetaOriginal = montarPayloadMeta;
+montarPayloadMeta = function(obj){
+  const payload = _montarPayloadMetaOriginal(obj);
+  if(obj.origem_consolidado){
+    payload.diagnostico = [
+      obj.leitura_card ? `Leitura para card do painel: ${obj.leitura_card}` : '',
+      obj.justificativa_principal ? `Justificativa principal: ${obj.justificativa_principal}` : '',
+      obj.acao_corretiva ? `Ação corretiva/próxima etapa: ${obj.acao_corretiva}` : '',
+      obj.risco ? `Risco: ${obj.risco}` : '',
+      obj.cronograma ? `Cronograma: ${obj.cronograma}` : '',
+      obj.fase ? `Fase: ${obj.fase}` : ''
+    ].filter(Boolean).join('\n') || payload.diagnostico;
+    payload.resumo = obj.leitura_card || obj.resumo || null;
+    payload.articulacao = obj.apoio_institucional && obj.apoio_institucional !== 'Não informado' ? String(obj.apoio_institucional) : (obj.articulacao || null);
+  }
+  return payload;
+};
+
+const _parseRowsParaSupabaseOriginal = parseRowsParaSupabase;
+parseRowsParaSupabase = function(rows, mesMonitoramento='', anoAnalise=anoAtual()){
+  const first = rows && rows[0] ? rows[0] : {};
+  const keys = Object.keys(first).map(normalizaChavePlanilha);
+  if(keys.includes('codigo da meta') && (keys.includes('status mais recente') || keys.includes('alerta painel') || keys.includes('mes mais recente'))){
+    return rows.map(r=>mapVisaoPorMeta(r, mesMonitoramento, anoAnalise)).filter(m=>m.unidade && m.meta);
+  }
+  if(keys.includes('codigo da meta') && (keys.includes('mes monitoramento') || keys.includes('status atual'))){
+    return rows.map(r=>mapBaseConsolidada(r, mesMonitoramento, anoAnalise)).filter(m=>m.unidade && m.meta);
+  }
+  return _parseRowsParaSupabaseOriginal(rows, mesMonitoramento, anoAnalise);
+};
+
+function opcoesFiltro(campo){
+  return [...new Set(allData.map(d=>String(d[campo]||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+}
+function preencherSelectFiltro(id, values, label){
+  const el = document.getElementById(id); if(!el) return;
+  const cur = el.value;
+  el.innerHTML = `<option value="">${label}</option>` + values.map(v=>`<option${v===cur?' selected':''}>${escHtml(v)}</option>`).join('');
+}
+const _populateFiltersOriginal = populateFilters;
+populateFilters = function(){
+  _populateFiltersOriginal();
+  preencherSelectFiltro('filtroAlerta', opcoesFiltro('alerta_painel'), 'Todos');
+  preencherSelectFiltro('filtroResponsavel', opcoesFiltro('responsavel'), 'Todos');
+  preencherSelectFiltro('filtroPrioridade', opcoesFiltro('prioridade_atual'), 'Todas');
+  preencherSelectFiltro('filtroRisco', opcoesFiltro('risco'), 'Todos');
+  preencherSelectFiltro('filtroCronograma', opcoesFiltro('cronograma'), 'Todos');
+  preencherSelectFiltro('filtroApoio', opcoesFiltro('apoio_institucional'), 'Todos');
+};
+
+getFiltered = function(){
+  let d = allData.slice();
+  const mes = getActiveMes();
+  const st = document.getElementById('filtroStatus')?.value || '';
+  const bq = normalizarTextoBusca(document.getElementById('filtroBusca')?.value || '');
+  const alerta = document.getElementById('filtroAlerta')?.value || '';
+  const resp = document.getElementById('filtroResponsavel')?.value || '';
+  const pri = document.getElementById('filtroPrioridade')?.value || '';
+  const risco = document.getElementById('filtroRisco')?.value || '';
+  const cron = document.getElementById('filtroCronograma')?.value || '';
+  const apoio = document.getElementById('filtroApoio')?.value || '';
+  if(mes) d = d.filter(x=>x.mes===mes);
+  if(activeUnit) d = d.filter(x=>x.unidade===activeUnit);
+  if(st) d = d.filter(x=>x.status===st);
+  if(alerta) d = d.filter(x=>String(x.alerta_painel||'')===alerta);
+  if(resp) d = d.filter(x=>String(x.responsavel||'')===resp);
+  if(pri) d = d.filter(x=>String(x.prioridade_atual||'')===pri);
+  if(risco) d = d.filter(x=>String(x.risco||'')===risco);
+  if(cron) d = d.filter(x=>String(x.cronograma||'')===cron);
+  if(apoio) d = d.filter(x=>String(x.apoio_institucional||'')===apoio);
+  if(bq) d = d.filter(x=>normalizarTextoBusca([x.codigo_meta,x.meta,x.descricao_meta,x.unidade,x.responsavel].join(' ')).includes(bq));
+  return d;
+};
+
+clearFilters = function(){
+  ['filtroStatus','filtroBusca','filtroAlerta','filtroResponsavel','filtroPrioridade','filtroRisco','filtroCronograma','filtroApoio'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  activeUnit=''; updateUnitPills(); render();
+};
+
+function resumoValor(row, nomes){ return Number(getCellFlex(row, nomes)) || 0; }
+renderKPIs = function(data){
+  let total=data.length, concl=data.filter(d=>d.status==='Concluída').length, ea=data.filter(d=>d.status==='Em andamento').length, at=data.filter(d=>d.status==='Atrasada').length, ni=data.filter(d=>d.status==='Não iniciada').length;
+  let alertas=data.filter(d=>normalizarTextoBusca(d.alerta_painel).includes('alto')).length;
+  let apoio=data.filter(d=>normalizarTextoBusca(d.apoio_institucional).includes('sim')).length;
+  let risco=data.filter(d=>d.risco && d.risco!=='Não informado').length;
+  if(resumoDiretoriaData.length && !activeUnit){
+    const geral = resumoDiretoriaData.find(r=>['codae','total','geral','consolidado'].includes(normalizarTextoBusca(getCellFlex(r,['Diretoria','Unidade'])))) || null;
+    if(geral){
+      total = resumoValor(geral,['Total de metas únicas','Total de metas unicas','Metas únicas','Metas unicas']) || total;
+      ea = resumoValor(geral,['Metas em andamento','Em andamento']) || ea;
+      concl = resumoValor(geral,['Metas concluídas','Metas concluidas','Concluídas','Concluidas']) || concl;
+      at = resumoValor(geral,['Metas atrasadas','Atrasadas']) || at;
+      ni = resumoValor(geral,['Metas não iniciadas','Metas nao iniciadas','Não iniciadas','Nao iniciadas']) || ni;
+      alertas = resumoValor(geral,['Alertas altos','Alerta alto']) || alertas;
+      apoio = resumoValor(geral,['Metas com apoio institucional','Com apoio institucional']) || apoio;
+      risco = resumoValor(geral,['Metas com risco informado','Com risco informado']) || risco;
+    }
+  }
+  document.getElementById('kpiGrid').innerHTML=`
+    <div class="kpi-card total"><div class="kpi-num">${total}</div><div class="kpi-lbl">Metas únicas</div></div>
+    <div class="kpi-card ok"><div class="kpi-num">${concl}</div><div class="kpi-lbl">Concluídas</div></div>
+    <div class="kpi-card ea"><div class="kpi-num">${ea}</div><div class="kpi-lbl">Em andamento</div></div>
+    <div class="kpi-card at"><div class="kpi-num">${at}</div><div class="kpi-lbl">Atrasadas</div><div class="kpi-sub">${alertas} alerta(s) alto(s)</div></div>
+    <div class="kpi-card ni"><div class="kpi-num">${ni}</div><div class="kpi-lbl">Não iniciadas</div><div class="kpi-sub">${apoio} com apoio · ${risco} com risco</div></div>`;
+};
+
+function alertBadgeHTML(alerta){
+  const a = normAlerta(alerta);
+  const cls = normalizarTextoBusca(a).replace(/[^a-z0-9]+/g,'');
+  return `<span class="alert-badge ${cls}">${escHtml(a||'Não informado')}</span>`;
+}
+function previewText(v, n=130){
+  const s = String(v||'').trim();
+  return s.length>n ? s.slice(0,n-1)+'…' : s;
+}
+function historicoDaMeta(codigo){
+  const c = String(codigo||'').trim();
+  const fonte = baseConsolidadaData.length ? baseConsolidadaData : allData;
+  return [...fonte].filter(d=>String(d.codigo_meta||extrairCodigoMeta(d.meta))===c).sort((a,b)=>(Number(a.mes_ordem)||MESES.indexOf(a.mes)+1)-(Number(b.mes_ordem)||MESES.indexOf(b.mes)+1));
+}
+function renderHistoricoMini(m){
+  const regs = historicoDaMeta(m.codigo_meta || extrairCodigoMeta(m.meta));
+  if(!regs.length || regs.length===1) return '';
+  return `<div class="meta-history-mini"><h4>Histórico mensal da meta</h4>${regs.map(r=>`
+    <div class="meta-history-line"><strong>${escHtml(r.mes || '—')}</strong><span>${escHtml(r.status || '—')} — ${escHtml(previewText(r.evolucao_andamento || r.andamento || r.justificativa_principal || r.diagnostico || r.acoes_do_mes || '', 160))}</span></div>`).join('')}</div>`;
+}
+
+renderList = function(data){
+  const grouped = {}; STATUS_ORDER.forEach(s=>grouped[s]=[]); data.forEach(d=>(grouped[d.status]=grouped[d.status]||[]).push(d));
+  let html = '';
+  STATUS_ORDER.forEach(st=>{
+    const items = grouped[st]||[]; if(!items.length) return;
+    const cfg = STATUS_MAP[st]||STATUS_MAP['Não iniciada'];
+    html += `<div class="section-title"><span>${st}</span><span class="section-count ${cfg.cls}">${items.length} meta${items.length>1?'s':''}</span></div><div class="metas-list">`;
+    items.forEach(m=>{
+      const c = STATUS_MAP[m.status]||STATUS_MAP['Não iniciada'];
+      const dc = DIV_COLOR[m.unidade]||DIV_COLOR[String(m.unidade||'').toUpperCase()]||'#374151';
+      const bid = 'body_'+m.id;
+      html += `<div class="meta-card" data-status="${escAttr(m.status)}">
+        <div class="meta-header" onclick="toggleMeta('${bid}')">
+          <div class="status-dot" style="background:${c.color}"></div>
+          <span class="status-badge ${c.badge}">${escHtml(m.status)}</span>
+          ${alertBadgeHTML(m.alerta_painel)}
+          <span class="unit-tag" style="background:${dc}">${escHtml(m.unidade)}</span>
+          <span class="meta-name-text"><strong>${escHtml(m.codigo_meta||extrairCodigoMeta(m.meta))}</strong> — ${escHtml(m.descricao_meta||m.meta)}</span>
+          <span class="meta-chevron" id="chev_${bid}">⌄</span>
+        </div>
+        <div class="meta-body" id="${bid}">
+          <div class="meta-detail-grid">
+            <div class="meta-detail-item"><div class="k">Código da meta</div><div class="v">${escHtml(m.codigo_meta||extrairCodigoMeta(m.meta))}</div></div>
+            <div class="meta-detail-item"><div class="k">Diretoria</div><div class="v" style="color:${dc};font-weight:700">${escHtml(m.unidade)}</div></div>
+            <div class="meta-detail-item"><div class="k">Status mais recente</div><div class="v"><span class="status-badge ${c.badge}">${escHtml(m.status)}</span></div></div>
+            <div class="meta-detail-item"><div class="k">Alerta painel</div><div class="v">${alertBadgeHTML(m.alerta_painel)}</div></div>
+            <div class="meta-detail-item"><div class="k">Mês mais recente</div><div class="v">${escHtml(m.mes)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Responsável</div><div class="v">${escHtml(m.responsavel)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Prioridade atual</div><div class="v">${escHtml(m.prioridade_atual)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Risco</div><div class="v">${escHtml(m.risco)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Cronograma</div><div class="v">${escHtml(m.cronograma)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Fase/etapa</div><div class="v">${escHtml(m.fase)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Apoio institucional</div><div class="v">${escHtml(m.apoio_institucional)||'—'}</div></div>
+            <div class="meta-detail-item"><div class="k">Registros históricos</div><div class="v">${escHtml(m.qtd_historico || historicoDaMeta(m.codigo_meta).length || '—')}</div></div>
+          </div>
+          ${m.leitura_card?`<div class="resumo-box"><strong>Leitura para card do painel:</strong> ${escHtml(m.leitura_card)}</div>`:''}
+          ${m.justificativa_principal?`<div class="motivo-box"><strong>Justificativa principal:</strong> ${escHtml(m.justificativa_principal)}</div>`:''}
+          ${m.acao_corretiva?`<div class="diagnostico-box"><strong>Ação corretiva/próxima etapa:</strong> ${escHtml(m.acao_corretiva)}</div>`:''}
+          ${renderHistoricoMini(m)}
+          ${!m.origem_consolidado ? renderDiagnosticoPorStatus(m) : ''}
+          <div class="meta-actions">
+            <button class="btn btn-outline btn-sm" onclick="openHistoryMetaModal('${escAttr(m.codigo_meta||extrairCodigoMeta(m.meta))}','${escAttr(m.ano||anoAtual())}')">📈 Ver histórico</button>
+            <button class="btn btn-outline btn-sm" onclick="openEditModal('${m.id}')">✏ Editar</button>
+            <button class="btn btn-outline btn-sm" style="color:#b21f2d;border-color:#fca5a5" onclick="deleteMeta('${m.id}')">🗑 Remover</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  if(!html) html = `<div class="empty-state"><span class="big-icon">🎯</span>Nenhuma meta encontrada com os filtros aplicados.</div>`;
+  document.getElementById('metasList').innerHTML = html;
+};
+
+function renderRiskPanel(){
+  const host = document.getElementById('riskPanelContent'); if(!host) return;
+  const fonte = (justificativasRiscosData.length ? justificativasRiscosData : allData.filter(d=>normalizarTextoBusca(d.alerta_painel).includes('alto') || (d.risco && d.risco!=='Não informado') || normalizarTextoBusca(d.apoio_institucional).includes('sim'))).slice(0,9);
+  if(!fonte.length){ host.innerHTML=''; return; }
+  host.innerHTML = `<div class="risk-panel"><h3>Justificativas, riscos e ações prioritárias</h3><div class="risk-grid">${fonte.map(r=>`
+    <div class="risk-card">
+      <div class="risk-title">${escHtml(r.codigo_meta || extrairCodigoMeta(r.meta))} · ${escHtml(r.unidade || '')} · ${alertBadgeHTML(r.alerta_painel)}</div>
+      <div><strong>Status:</strong> ${escHtml(r.status || '—')} | <strong>Mês:</strong> ${escHtml(r.mes || '—')}</div>
+      <div><strong>Justificativa/Motivo:</strong> ${escHtml(previewText(r.justificativa_principal || r.motivo_atraso || r.motivo_nao_iniciada || r.diagnostico || '—', 180))}</div>
+      <div><strong>Ação/próxima etapa:</strong> ${escHtml(previewText(r.acao_corretiva || r.acoes_corretivas || r.proximas_etapas || r.plano_acao || '—', 160))}</div>
+      <div><strong>Apoio:</strong> ${escHtml(r.apoio_institucional || '—')} | <strong>Responsável:</strong> ${escHtml(r.responsavel || '—')}</div>
+    </div>`).join('')}</div></div>`;
+}
+
+const _renderOriginal = render;
+render = function(){
+  buildUnitPills();
+  const data = getFiltered();
+  const mes = getActiveMes();
+  document.getElementById('mesBadge').textContent = '📅 Referência: '+(mes||'—');
+  renderKPIs(data); renderPie(data); renderBar(data, mes); renderRiskPanel(); renderList(data); renderMacro();
+};
+
+renderBar = function(data, mes){
+  const mesData = mes ? allData.filter(d=>d.mes===mes) : allData;
+  const units = [...new Set(mesData.map(d=>d.unidade).filter(Boolean))];
+  const statuses = ['Concluída','Em andamento','Atrasada','Não iniciada','Não informado'];
+  const colors = ['#1e7e34','#0056b3','#b21f2d','#5a5a6a','#9ca3af'];
+  const datasets = statuses.map((s,i)=>({label:s,data:units.map(u=>mesData.filter(d=>d.unidade===u&&d.status===s).length),backgroundColor:colors[i]+'cc',borderColor:colors[i],borderWidth:1}));
+  if(barCI) barCI.destroy();
+  barCI = new Chart(document.getElementById('barChart'),{type:'bar',data:{labels:units,datasets},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,ticks:{font:{size:11}},grid:{display:false}},y:{stacked:true,ticks:{stepSize:1,font:{size:11}},grid:{color:'#f3f4f6'}}},plugins:{legend:{labels:{font:{size:11},boxWidth:12,boxHeight:12}}}}});
+};
+
+renderPie = function(data){
+  const keys = ['Concluída','Em andamento','Atrasada','Não iniciada','Não informado'];
+  const counts = keys.map(k=>data.filter(d=>d.status===k).length);
+  const colors = ['#1e7e34','#0056b3','#b21f2d','#5a5a6a','#9ca3af'];
+  if(pieCI) pieCI.destroy();
+  const ctx = document.getElementById('pieChart');
+  if(counts.every(c=>c===0)){ ctx.getContext('2d').clearRect(0,0,ctx.width,ctx.height); document.getElementById('pieLegend').innerHTML=''; return; }
+  pieCI = new Chart(ctx,{type:'doughnut',data:{labels:keys,datasets:[{data:counts,backgroundColor:colors,borderColor:'#fff',borderWidth:3,hoverBorderWidth:3}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.label}: ${c.raw}`}}}}});
+  const total = counts.reduce((a,b)=>a+b,0);
+  document.getElementById('pieLegend').innerHTML = keys.map((k,i)=>counts[i]?`<div class="pie-leg-row"><div class="pie-leg-dot" style="background:${colors[i]}"></div><span class="pie-leg-label">${k}</span><span class="pie-leg-val">${counts[i]} (${total?Math.round(counts[i]/total*100):0}%)</span></div>`:'').join('');
+};
+
+function importarWorkbook(input, substituir=false, mesAnoEspecifico=null){
+  const file = input.files[0]; if(!file) return;
+  const run = async periodo=>{
+    if(!periodo){ input.value=''; showToast('Operação cancelada: é obrigatório informar mês e ano quando solicitado.','error'); return; }
+    const reader = new FileReader();
+    reader.onload = async e=>{
+      try{
+        const wb = XLSX.read(e.target.result,{type:'binary'});
+        let metas;
+        if(workbookConsolidado(wb)){
+          metas = parseWorkbookConsolidado(wb, periodo);
+          if(!metas.length){ showToast('Nenhuma meta válida encontrada na aba VISAO_POR_META.','error'); return; }
+        }else{
+          const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[wsName],{defval:''});
+          metas = parseRowsParaSupabase(rows, periodo.mes, periodo.ano);
+        }
+        if(substituir && supabaseConfigurado()){
+          const { error: rpcError } = await supabaseClient.rpc('arquivar_ciclo_atual_codae', { ano_analise: periodo.ano });
+          if(rpcError){ const { error: rpcError2 } = await supabaseClient.rpc('arquivar_ciclo_atual_codae'); if(rpcError2) console.warn('Não foi possível arquivar via RPC.', rpcError2); }
+        }
+        if(supabaseConfigurado()) await inserirMetasSupabase(metas);
+        allData = metas;
+        atualizarMetasPorUnidade(); populateFilters(); document.getElementById('filtroMes').value = getActiveMes() || ''; render();
+        showToast(`${substituir?'Substituição':'Importação'} concluída! ${metas.length} metas lidas conforme a nova estrutura do Excel consolidado.`, 'success');
+      }catch(err){ console.error('Erro ao importar Excel consolidado:', err); showToast('Erro ao importar: '+(err.message || err),'error'); }
+    };
+    reader.readAsBinaryString(file); input.value='';
+  };
+  if(mesAnoEspecifico) run(mesAnoEspecifico);
+  else askMonitoringPeriod({title:substituir?'Substituir metas':'Importar novo Excel', info:'Se o Excel for consolidado, o painel usará as abas VISAO_POR_META, BASE_CONSOLIDADA, RESUMO_DIRETORIA, JUSTIFICATIVAS_RISCOS e LISTAS_PAINEL.'}).then(run);
+}
+handleXLSX = function(input){ importarWorkbook(input,false); };
+handleReplace = function(input){ importarWorkbook(input,true); };
+handleReplaceMonth = function(input){
+  const mes = document.getElementById('mgrMes').value;
+  const ano = Number(document.getElementById('mgrAno').value);
+  if(!mes || !ano){ input.value=''; showToast('Informe mês e ano antes de substituir.','error'); return; }
+  if(!confirm(`Substituir somente os dados de ${mes}/${ano} por este novo Excel?`)){ input.value=''; return; }
+  importarWorkbook(input,false,{mes,ano});
+};
+
+const _openHistoryMetaModalOriginal = openHistoryMetaModal;
+openHistoryMetaModal = function(codigoMeta, ano){
+  const codigo = String(codigoMeta||'').trim();
+  const registros = historicoDaMeta(codigo).filter(d=>!ano || Number(d.ano)===Number(ano) || arquivoConsolidadoAtivo);
+  if(!registros.length){ return _openHistoryMetaModalOriginal(codigoMeta, ano); }
+  const meses = sortMeses([...new Set(registros.map(d=>d.mes).filter(Boolean))]);
+  const body = document.getElementById('historyMetaBody');
+  const primeiro = registros[0] || {};
+  body.innerHTML = `<div class="meta-detail-grid">
+    <div class="meta-detail-item"><div class="k">Código da meta</div><div class="v">${escHtml(codigo)}</div></div>
+    <div class="meta-detail-item"><div class="k">Descrição da meta</div><div class="v">${escHtml(primeiro.descricao_meta || primeiro.meta || codigo)}</div></div>
+    <div class="meta-detail-item"><div class="k">Ano de análise</div><div class="v">${escHtml(ano || primeiro.ano || anoAtual())}</div></div>
+    <div class="meta-detail-item"><div class="k">Meses cadastrados</div><div class="v">${meses.map(escHtml).join(', ') || '—'}</div></div>
+    <div class="meta-detail-item"><div class="k">Chave de cruzamento</div><div class="v">Código da meta</div></div>
+  </div>
+  <div class="alert-box alert-info">Histórico ordenado pelo campo Mês ordem da aba BASE_CONSOLIDADA, sem misturar metas diferentes.</div>
+  ${registros.map(r=>{ const cfg=STATUS_MAP[r.status]||STATUS_MAP['Não iniciada']; return `<div class="history-detail-row">
+    <div class="history-detail-head"><strong>${escHtml(r.mes || '—')}</strong><span class="status-badge ${cfg.badge}">${escHtml(r.status||'—')}</span>${alertBadgeHTML(r.alerta_painel)}</div>
+    <div class="meta-detail-grid" style="margin-bottom:10px">
+      <div class="meta-detail-item"><div class="k">Diretoria</div><div class="v">${escHtml(r.unidade || '—')}</div></div>
+      <div class="meta-detail-item"><div class="k">Responsável</div><div class="v">${escHtml(r.responsavel || '—')}</div></div>
+      <div class="meta-detail-item"><div class="k">Prioridade</div><div class="v">${escHtml(r.prioridade_atual || '—')}</div></div>
+      <div class="meta-detail-item"><div class="k">Risco</div><div class="v">${escHtml(r.risco || r.risco_no_prazo || '—')}</div></div>
+      <div class="meta-detail-item"><div class="k">Cronograma</div><div class="v">${escHtml(r.cronograma || '—')}</div></div>
+      <div class="meta-detail-item"><div class="k">Arquivo origem</div><div class="v">${escHtml(r.arquivo_origem || '—')}</div></div>
+    </div>
+    ${r.motivo_nao_iniciada?`<div class="motivo-box"><strong>Motivo não iniciada:</strong> ${escHtml(r.motivo_nao_iniciada)}</div>`:''}
+    ${r.motivo_atraso?`<div class="motivo-box"><strong>Motivo atraso:</strong> ${escHtml(r.motivo_atraso)}</div>`:''}
+    ${r.evolucao_andamento?`<div class="resumo-box"><strong>Evolução andamento:</strong> ${escHtml(r.evolucao_andamento)}</div>`:''}
+    ${r.acoes_do_mes?`<div class="diagnostico-box"><strong>Ações do mês:</strong> ${escHtml(r.acoes_do_mes)}</div>`:''}
+    ${r.acao_corretiva||r.acoes_corretivas||r.proximas_etapas?`<div class="diagnostico-box"><strong>Ação corretiva/próxima etapa:</strong> ${escHtml(r.acao_corretiva||r.acoes_corretivas||r.proximas_etapas)}</div>`:''}
+    ${r.dependencias?`<div class="motivo-box"><strong>Dependências:</strong> ${escHtml(r.dependencias)}</div>`:''}
+  </div>`; }).join('')}`;
+  document.getElementById('historyMetaModal').style.display = 'flex';
+};
+
+const _loadInitialDataOriginal = loadInitialData;
+loadInitialData = function(){
+  carregarTemaPainel();
+  if(!restaurarCacheConsolidado()) iniciarPainel();
+};
 
 // ===== INIT =====
 loadInitialData();
