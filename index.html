@@ -6,6 +6,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -534,6 +535,36 @@ body[data-theme="dark"] .diagnostico-section.ni{background:#18181b;border-color:
   display:block!important;
 }
 
+
+
+/* ===== REDESENHO ESTRUTURADO DOS CARDS DAS METAS ===== */
+.meta-header-meta{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.meta-header-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px;color:#6b7280}
+.meta-info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:12px 0 14px}
+.info-box{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:11px 12px;min-height:74px;overflow:hidden}
+.info-label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:6px}
+.info-value{font-size:12px;line-height:1.55;color:#1f2937;white-space:pre-wrap;overflow-wrap:anywhere}
+.status-section-em-andamento .info-box{background:#f0f9ff;border-color:#bae6fd}
+.status-section-em-andamento .info-value{color:#0c4a6e}
+.status-section-atrasada .info-box{background:#fff7ed;border-color:#fed7aa}
+.status-section-atrasada .info-value{color:#7c2d12}
+.status-section-nao-iniciada .info-box{background:#f4f4f5;border-color:#d4d4d8}
+.status-section-nao-iniciada .info-value{color:#3f3f46}
+.status-section-concluida .info-box{background:#f0fdf4;border-color:#bbf7d0}
+.status-section-concluida .info-value{color:#14532d}
+.status-field-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:10px 0 14px}
+.status-field-grid .form-full{margin-bottom:0}
+.status-fields-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin:14px 0 8px;border-top:1px solid #eef0f3;padding-top:14px}
+.status-hint{font-size:11px;color:#6b7280;margin:-2px 0 8px;line-height:1.45}
+@media(max-width:680px){.meta-info-grid,.status-field-grid{grid-template-columns:1fr}.meta-header{align-items:flex-start}.meta-chevron{margin-left:auto}}
+body[data-theme="dark"] .info-box{background:#0b1220;border-color:#273449}
+body[data-theme="dark"] .info-label{color:#9ca3af}
+body[data-theme="dark"] .info-value{color:#e5e7eb}
+body[data-theme="dark"] .status-section-em-andamento .info-box{background:#0b2338;border-color:#1d4e89}
+body[data-theme="dark"] .status-section-atrasada .info-box{background:#331616;border-color:#7f1d1d}
+body[data-theme="dark"] .status-section-nao-iniciada .info-box{background:#18181b;border-color:#3f3f46}
+body[data-theme="dark"] .status-section-concluida .info-box{background:#052e16;border-color:#166534}
+
 </style>
 </head>
 <body>
@@ -560,8 +591,8 @@ body[data-theme="dark"] .diagnostico-section.ni{background:#18181b;border-color:
       </select>
     </div>
     <button class="btn btn-outline btn-sm" onclick="downloadTemplate()">⬇ Baixar modelo padrão de Excel</button>
-    <label class="btn btn-outline btn-sm" for="xlsxInput">⬆ Importar Excel</label>
-    <input type="file" id="xlsxInput" accept=".xlsx,.xls" onchange="handleXLSX(this)">
+    <label class="btn btn-outline btn-sm" for="xlsxInput">⬆ Importar Excel(s)</label>
+    <input type="file" id="xlsxInput" accept=".xlsx,.xls" multiple onchange="handleXLSX(this)">
     <button class="btn btn-success btn-sm" onclick="openNewMetaModal()">+ Adicionar Evolução das Metas</button>
     <button class="btn btn-danger btn-sm" onclick="openReplaceModal()">↺ Substituir Metas</button>
     <button class="btn btn-outline btn-sm" onclick="openExcelManagerModal()">🗓 Gerenciar Excels</button>
@@ -706,7 +737,7 @@ body[data-theme="dark"] .diagnostico-section.ni{background:#18181b;border-color:
       <div class="form-row">
         <div>
           <label class="form-label">Status <span class="req">*</span></label>
-          <select id="f_status" class="form-control form-select" required>
+          <select id="f_status" class="form-control form-select" required onchange="onStatusFormChange()">
             <option>Não iniciada</option>
             <option>Em andamento</option>
             <option>Atrasada</option>
@@ -725,6 +756,9 @@ Andamento: ...
 Ações do mês: ...
 Cronograma: ..."></textarea>
       </div>
+      <div id="statusFieldsTitle" class="status-fields-title">Campos específicos do status</div>
+      <div id="statusFieldsHint" class="status-hint">Os campos abaixo mudam automaticamente conforme o status selecionado.</div>
+      <div id="statusFieldsContainer" class="status-field-grid"></div>
       <div class="form-row">
         <div>
           <label class="form-label">Motivo do atraso</label>
@@ -907,19 +941,9 @@ function ordenarRegistrosPorMes(registros){
   return [...registros].sort((a,b)=>MESES.indexOf(a.mes)-MESES.indexOf(b.mes));
 }
 function montarDiagnosticoComMotivos(diagnostico, motivoAtraso, motivoNaoIniciada){
-  let base = String(diagnostico||'').trim();
-  const sections = extractDiagnosticSections(base);
-  const partes = [];
-  if(sections.fase) partes.push(`Fase: ${sections.fase}`);
-  if(sections.andamento) partes.push(`Andamento: ${sections.andamento}`);
-  if(sections.acoesMes) partes.push(`Ações do mês: ${sections.acoesMes}`);
-  if(sections.cronograma) partes.push(`Cronograma: ${sections.cronograma}`);
-  if(!Object.keys(sections).length && base) partes.push(base);
-  if(motivoAtraso) partes.push(`Motivo do atraso: ${String(motivoAtraso).trim()}`);
-  else if(sections.motivoAtraso) partes.push(`Motivo do atraso: ${sections.motivoAtraso}`);
-  if(motivoNaoIniciada) partes.push(`Motivo de não ter sido iniciada: ${String(motivoNaoIniciada).trim()}`);
-  else if(sections.motivoNaoIniciada) partes.push(`Motivo de não ter sido iniciada: ${sections.motivoNaoIniciada}`);
-  return partes.join('\n');
+  // Mantido por compatibilidade, mas sem misturar motivo de atraso/não iniciada no campo Diagnóstico.
+  // O diagnóstico deve ser salvo exatamente como o usuário digitou, e os motivos ficam em campos próprios.
+  return String(diagnostico||'').trim();
 }
 function aplicarTemaPainel(tema){
   const modo = tema === 'dark' ? 'dark' : 'light';
@@ -1058,12 +1082,21 @@ function extrairCamposEstruturados(diagnostico, status){
   };
 }
 
+function removerMotivosDoDiagnostico(texto){
+  const source = String(texto||'').replace(/\n/g,'\n').trim();
+  if(!source) return '';
+  return source.split(/\n+/).map(l=>l.trim()).filter(l=>{
+    const n = normalizarTextoBusca(l);
+    return !(n.startsWith('motivo do atraso:') || n.startsWith('motivo de atraso:') || n.startsWith('motivo de nao ter sido iniciada:') || n.startsWith('motivo nao iniciada:'));
+  }).join('\n').trim();
+}
+
 function montarPayloadMeta(obj){
   const status = normStatus(obj.status);
-  const diagnosticoComMotivos = montarDiagnosticoComMotivos(obj.diagnostico || '', obj.motivo_atraso || '', obj.motivo_nao_iniciada || '');
-  const estruturados = extrairCamposEstruturados(diagnosticoComMotivos || obj.diagnostico || '', status);
-  const motivoAtraso = String(obj.motivo_atraso || estruturados.motivo_atraso || '').trim();
-  const motivoNaoIniciada = String(obj.motivo_nao_iniciada || estruturados.motivo_nao_iniciada || '').trim();
+  const diagnosticoLimpo = removerMotivosDoDiagnostico(obj.diagnostico || '');
+  const estruturados = extrairCamposEstruturados(diagnosticoLimpo || '', status);
+  const motivoAtraso = String(obj.motivo_atraso || '').trim();
+  const motivoNaoIniciada = String(obj.motivo_nao_iniciada || '').trim();
   return {
     ano: Number(obj.ano) || anoAtual(),
     mes: normalizeMonth(obj.mes),
@@ -1071,7 +1104,7 @@ function montarPayloadMeta(obj){
     meta: String(obj.meta || '').trim(),
     status,
     responsavel: obj.responsavel || null,
-    diagnostico: diagnosticoComMotivos || obj.diagnostico || null,
+    diagnostico: diagnosticoLimpo || null,
     resumo: obj.resumo || null,
     articulacao: obj.articulacao || null,
     fase: estruturados.fase,
@@ -1256,29 +1289,216 @@ function loadInitialData(){
   iniciarPainel();
 }
 
-function parseRowsParaSupabase(rows, mesMonitoramento='', anoAnalise=anoAtual()){
+
+function inferirUnidadePeloArquivo(nomeArquivo=''){
+  const n = cleanCell(nomeArquivo).toUpperCase();
+  if(n.includes('GABINETE')) return 'Gabinete';
+  for(const d of DIVISOES){
+    if(n.includes(d.toUpperCase())) return d;
+  }
+  return '';
+}
+function limparRotuloPergunta(h){
+  return cleanCell(h)
+    .replace(/^Pontos\s*[–-]\s*/i,'')
+    .replace(/^Comentários\s*[–-]\s*/i,'')
+    .replace(/[👉✅⚠️🚨]/g,'')
+    .replace(/[_\s]*\d+$/,'')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+function chavePergunta(h){
+  return normalizeHeaderKey(limparRotuloPergunta(h));
+}
+function isColunaControleFormulario(h){
+  const raw = cleanCell(h).toLowerCase();
+  const nk = normalizeHeaderKey(h);
+  if(raw.startsWith('pontos') || raw.startsWith('comentários') || raw.startsWith('comentarios')) return true;
+  return [
+    'id','horadeinicio','horadeconclusao','email','nome','totaldepontos','comentariosdoteste','horadepostagemdanota'
+  ].includes(nk);
+}
+function valorRespostaValido(v){
+  if(!hasValidValue(v)) return false;
+  const t = cleanCell(v);
+  if(t === '0') return false;
+  return true;
+}
+function getTodasRespostas(row, termos){
+  const termosNorm = termos.map(t=>normalizeHeaderKey(t)).filter(Boolean);
+  const out = [];
+  Object.keys(row).forEach(k=>{
+    if(isColunaControleFormulario(k)) return;
+    const ck = chavePergunta(k);
+    if(!ck) return;
+    if(termosNorm.some(t=>ck === t || ck.includes(t) || t.includes(ck))){
+      const v = row[k];
+      if(valorRespostaValido(v)) out.push({header:k, label:limparRotuloPergunta(k), value:v});
+    }
+  });
+  return out;
+}
+function getPrimeiraResposta(row, termos){
+  const found = getTodasRespostas(row, termos);
+  return found.length ? found[0].value : '';
+}
+function extrairMetaExcel(row){
+  return cleanCell(getPrimeiraResposta(row, [
+    'Selecione a meta pela qual deseja iniciar o monitoramento',
+    'Meta monitorada', 'Meta selecionada', 'Meta', 'Descrição da Meta', 'Descricao da Meta'
+  ]));
+}
+function extrairResponsavelExcel(row){
+  return cleanCell(getPrimeiraResposta(row, ['Nome do Responsável', 'Nome do Responsavel', 'Responsável', 'Responsavel']));
+}
+function extrairMesExcel(row){
+  return cleanCell(getPrimeiraResposta(row, ['Mês de monitoramento', 'Mes de monitoramento', 'Mês de Referência', 'Mes de Referencia', 'Mês', 'Mes']));
+}
+function respostaPorRotulo(row, termos){
+  const v = getPrimeiraResposta(row, termos);
+  return valorRespostaValido(v) ? cleanCell(v) : '';
+}
+function montarLinhasDiagnostico(row, pares){
+  const linhas = [];
+  const vistos = new Set();
+  pares.forEach(([titulo, termos])=>{
+    const v = respostaPorRotulo(row, termos);
+    if(!v) return;
+    const chave = normalizarTextoBusca(titulo+'|'+v);
+    if(vistos.has(chave)) return;
+    vistos.add(chave);
+    linhas.push(`${titulo}: ${v}`);
+  });
+  return linhas.join('\n');
+}
+function montarDiagnosticoExcel(row){
+  // O Excel do Forms possui vários blocos de perguntas repetidos.
+  // Aqui o painel monta um diagnóstico enxuto e NÃO mistura motivo de atraso/não iniciada,
+  // pois esses motivos são salvos e editados em campos separados.
+  const direto = getPrimeiraResposta(row, [
+    'Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico',
+    'Justificativa','Leitura da meta','Leitura do card','Evolução mensal','Evolucao mensal','Evolução','Evolucao'
+  ]);
+  if(valorRespostaValido(direto)) return cleanCell(direto);
+
+  const status = definirStatusMetaExcelSemDiagnostico(row);
+  if(status === 'Atrasada'){
+    return montarLinhasDiagnostico(row, [
+      ['Etapa do atraso', ['O atraso ocorreu em qual etapa']],
+      ['Situação do atraso', ['Em relação ao mês anterior, a situação do atraso', 'Em relacao ao mes anterior, a situacao do atraso']],
+      ['Impacto no resultado', ['O atraso está impactando o resultado da meta', 'O atraso esta impactando o resultado da meta']],
+      ['Responsabilidade', ['O motivo do atraso está sob responsabilidade exclusiva da sua área', 'O motivo do atraso esta sob responsabilidade exclusiva da sua area']],
+      ['Diretoria envolvida', ['Qual diretoria está sendo responsável pelo atraso no andamento da meta', 'Qual diretoria esta sendo responsavel pelo atraso no andamento da meta']],
+      ['Ações corretivas', ['Sobre as ações corretivas para reverter o atraso', 'Sobre as acoes corretivas para reverter o atraso']],
+      ['Apoio institucional', ['Há necessidade de apoio institucional para regularizar o andamento', 'Ha necessidade de apoio institucional para regularizar o andamento']]
+    ]);
+  }
+  if(status === 'Não iniciada'){
+    return montarLinhasDiagnostico(row, [
+      ['Plano de ação', ['Essa meta já possui plano de ação estruturado', 'Essa meta ja possui plano de acao estruturado']],
+      ['Adequação para início', ['Se já tiver plano de ação, ele está adequado para início da execução', 'Se ja tiver plano de acao, ele esta adequado para inicio da execucao']],
+      ['Prioridade', ['Qual o nível de prioridade para iniciar esta meta', 'Qual o nivel de prioridade para iniciar esta meta']],
+      ['Ação definida', ['Existe alguma ação já definida para viabilizar o início da meta', 'Existe alguma acao ja definida para viabilizar o inicio da meta']]
+    ]);
+  }
+  return montarLinhasDiagnostico(row, [
+    ['Fase', ['Qual fase do andamento está a meta', 'Qual fase do andamento esta a meta']],
+    ['Andamento', ['Em relação ao mês anterior, o andamento da meta', 'Em relacao ao mes anterior, o andamento da meta', 'Andamento da meta']],
+    ['Ações do mês', ['As ações previstas para este mês foram executadas conforme o planejado', 'As acoes previstas para este mes foram executadas conforme o planejado']],
+    ['Cronograma', ['O cronograma da meta está', 'O cronograma da meta esta']],
+    ['Resultado atual', ['O resultado atual está aderente ao esperado', 'O resultado atual esta aderente ao esperado']],
+    ['Próximas etapas', ['Próximas etapas', 'Proximas etapas']]
+  ]);
+}
+
+function extrairResumoExcel(row){
+  const resumoDireto = getPrimeiraResposta(row, ['Resumo do Cenário','Resumo do Cenario','Resumo']);
+  if(valorRespostaValido(resumoDireto)) return cleanCell(resumoDireto);
+  const partes = [];
+  ['Qual fase do andamento está a meta','Em relação ao mês anterior, o andamento da meta','O cronograma da meta está','O resultado atual está aderente ao esperado'].forEach(t=>{
+    const v = getPrimeiraResposta(row, [t]);
+    if(valorRespostaValido(v)) partes.push(cleanCell(v));
+  });
+  return partes.join(' | ');
+}
+function extrairArticulacaoExcel(row){
+  const direto = getPrimeiraResposta(row, ['Articulação / Dependências','Articulacao / Dependencias','Articulação','Articulacao','Dependências','Dependencias']);
+  if(valorRespostaValido(direto)) return cleanCell(direto);
+  const respAtraso = getPrimeiraResposta(row, ['Qual diretoria está sendo responsável pelo atraso no andamento da meta','Qual diretoria esta sendo responsavel pelo atraso no andamento da meta']);
+  return valorRespostaValido(respAtraso) ? cleanCell(respAtraso) : '';
+}
+function definirStatusMetaExcelSemDiagnostico(row){
+  const respostasStatus = getTodasRespostas(row, [
+    'Qual o status atual da meta', 'Status atual da meta', 'Status da Meta', 'Status meta', 'Status',
+    'Situação atual', 'Situacao atual', 'Situação da Meta', 'Situacao da Meta', 'Situação', 'Situacao', 'Andamento'
+  ]).map(x=>x.value).filter(valorRespostaValido);
+  for(const v of respostasStatus){
+    const normalizado = normStatus(v, '');
+    if(normalizado) return normalizado;
+  }
+  const percentuais = PERCENT_COLUMNS.map(c=>percentualExecucaoValor(getCell(row,[c]))).filter(n=>n>0);
+  if(percentuais.some(n=>n>=100)) return 'Concluída';
+  if(percentuais.some(n=>n>0)) return 'Em andamento';
+  const motivoAtraso = getPrimeiraResposta(row, ['Qual é o principal motivo para a meta estar atrasada','Qual e o principal motivo para a meta estar atrasada','Motivo do atraso','Motivo de atraso']);
+  if(valorRespostaValido(motivoAtraso)) return 'Atrasada';
+  const motivoNao = getPrimeiraResposta(row, ['Qual é o principal motivo para a meta ainda não ter sido iniciada','Qual e o principal motivo para a meta ainda nao ter sido iniciada','Motivo de não ter sido iniciada','Motivo de nao ter sido iniciada','Motivo não iniciada','Motivo nao iniciada']);
+  if(valorRespostaValido(motivoNao)) return 'Não iniciada';
+  return 'Não iniciada';
+}
+function definirStatusMetaExcel(row){
+  const respostasStatus = getTodasRespostas(row, [
+    'Qual o status atual da meta', 'Status atual da meta', 'Status da Meta', 'Status meta', 'Status',
+    'Situação atual', 'Situacao atual', 'Situação da Meta', 'Situacao da Meta', 'Situação', 'Situacao', 'Andamento'
+  ]).map(x=>x.value).filter(valorRespostaValido);
+  for(const v of respostasStatus){
+    const normalizado = normStatus(v, '');
+    if(normalizado) return normalizado;
+  }
+
+  const percentuais = PERCENT_COLUMNS.map(c=>percentualExecucaoValor(getCell(row,[c]))).filter(n=>n>0);
+  if(percentuais.some(n=>n>=100)) return 'Concluída';
+  if(percentuais.some(n=>n>0)) return 'Em andamento';
+
+  const motivoAtraso = getPrimeiraResposta(row, ['Qual é o principal motivo para a meta estar atrasada','Qual e o principal motivo para a meta estar atrasada','Motivo do atraso','Motivo de atraso']);
+  if(valorRespostaValido(motivoAtraso)) return 'Atrasada';
+
+  const acompanhamento = montarDiagnosticoExcel(row);
+  if(valorRespostaValido(acompanhamento)) return 'Em andamento';
+
+  const motivoNao = getPrimeiraResposta(row, ['Qual é o principal motivo para a meta ainda não ter sido iniciada','Qual e o principal motivo para a meta ainda nao ter sido iniciada','Motivo de não ter sido iniciada','Motivo de nao ter sido iniciada','Motivo não iniciada','Motivo nao iniciada']);
+  if(valorRespostaValido(motivoNao)) return 'Não iniciada';
+
+  const temAcompanhamento = ACOMPANHAMENTO_COLUMNS.some(c=>hasValidValue(getCell(row,[c])));
+  if(temAcompanhamento) return 'Em andamento';
+
+  return 'Não iniciada';
+}
+
+function parseRowsParaSupabase(rows, mesMonitoramento='', anoAnalise=anoAtual(), nomeArquivo=''){
   const parsed = [];
   const mesForcado = normalizeMonth(mesMonitoramento);
+  const unidadeArquivo = inferirUnidadePeloArquivo(nomeArquivo);
   rows.forEach(r=>{
-    const unit = normUnit(getCell(r, ['Diretoria','diretoria','Unidade','unidade','Divisão','Divisao','divisao']));
-    const meta = String(getCell(r, ['Meta','meta','Descrição da Meta','Descricao da Meta'])).trim();
-    if(!unit||!meta) return;
+    const unit = normUnit(getCell(r, ['Diretoria','diretoria','Unidade','unidade','Divisão','Divisao','divisao'])) || unidadeArquivo;
+    const meta = extrairMetaExcel(r) || cleanCell(getCell(r, ['Meta','meta','Descrição da Meta','Descricao da Meta']));
+    if(!unit || !meta) return;
     const status = definirStatusMetaExcel(r);
-    const mesOriginal = getCell(r, ['Mês','Mes','mes','Mês de Referência','Mes de Referencia','Mês Referência','Mes Referencia']);
+    const mesOriginal = extrairMesExcel(r) || getCell(r, ['Mês','Mes','mes','Mês de Referência','Mes de Referencia','Mês Referência','Mes Referencia']);
     const mes = mesForcado || normalizeMonth(mesOriginal);
     if(!mes) return;
+    const diagnosticoForm = montarDiagnosticoExcel(r);
     parsed.push({
       ano: Number(anoAnalise) || anoAtual(),
       mes,
       unidade: unit,
       meta,
       status,
-      responsavel: String(getCell(r, ['Responsável','Responsavel','responsavel'])).trim(),
-      diagnostico: String(getCell(r, ['Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico','diagnostico','Justificativa','justificativa','Leitura da meta','Leitura do card','Evolução mensal','Evolucao mensal','Evolução','Evolucao','Andamento','Andamento da meta'])).trim(),
-      resumo: String(getCell(r, ['Resumo do Cenário','Resumo do Cenario','Resumo','resumo'])).trim(),
-      articulacao: String(getCell(r, ['Articulação / Dependências','Articulacao / Dependencias','Articulação','Articulacao','articulacao','Dependências','Dependencias'])).trim(),
-      motivo_atraso: String(getCell(r, ['Motivo do atraso','Motivo atraso','motivo_atraso','Motivo de atraso'])).trim(),
-      motivo_nao_iniciada: String(getCell(r, ['Motivo de não ter sido iniciada','Motivo de nao ter sido iniciada','Motivo não iniciada','Motivo nao iniciada','motivo_nao_iniciada','Motivo de não início','Motivo de nao inicio'])).trim()
+      responsavel: extrairResponsavelExcel(r) || cleanCell(getCell(r, ['Responsável','Responsavel','responsavel'])),
+      diagnostico: diagnosticoForm || cleanCell(getCell(r, ['Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico','diagnostico','Justificativa','justificativa','Leitura da meta','Leitura do card','Evolução mensal','Evolucao mensal','Evolução','Evolucao','Andamento','Andamento da meta'])),
+      resumo: extrairResumoExcel(r),
+      articulacao: extrairArticulacaoExcel(r),
+      motivo_atraso: cleanCell(getPrimeiraResposta(r, ['Qual é o principal motivo para a meta estar atrasada','Qual e o principal motivo para a meta estar atrasada','Motivo do atraso','Motivo atraso','Motivo de atraso'])),
+      motivo_nao_iniciada: cleanCell(getPrimeiraResposta(r, ['Qual é o principal motivo para a meta ainda não ter sido iniciada','Qual e o principal motivo para a meta ainda nao ter sido iniciada','Motivo de não ter sido iniciada','Motivo de nao ter sido iniciada','Motivo não iniciada','Motivo nao iniciada','Motivo de não início','Motivo de nao inicio']))
     });
   });
   return parsed;
@@ -1287,7 +1507,7 @@ function parseRowsParaSupabase(rows, mesMonitoramento='', anoAnalise=anoAtual())
 function normalizeMonth(m){
   const raw = String(m||'').trim();
   if(!raw) return '';
-  const clean = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const clean = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
   const found = MESES.find(x=>x.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')===clean);
   return found || raw;
 }
@@ -1303,32 +1523,18 @@ function sortMeses(lista){
   });
 }
 
-function parseRows(rows, isLoad, mesMonitoramento=''){
-  const parsed = [];
-  const mesForcado = normalizeMonth(mesMonitoramento);
-  rows.forEach(r=>{
-    const unit = normUnit(getCell(r, ['Diretoria','diretoria','Unidade','unidade','Divisão','Divisao','divisao']));
-    const meta = String(getCell(r, ['Meta','meta','Descrição da Meta','Descricao da Meta'])).trim();
-    if(!unit||!meta) return;
-    const status = definirStatusMetaExcel(r);
-    const mesOriginal = getCell(r, ['Mês','Mes','mes','Mês de Referência','Mes de Referencia','Mês Referência','Mes Referencia']);
-    const mes = mesForcado || normalizeMonth(mesOriginal);
-    if(!mes) return;
-    const resp = String(getCell(r, ['Responsável','Responsavel','responsavel'])).trim();
-    const diag = String(getCell(r, ['Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico','diagnostico','Justificativa','justificativa','Leitura da meta','Leitura do card','Evolução mensal','Evolucao mensal','Evolução','Evolucao','Andamento','Andamento da meta'])).trim();
-    const resumo = String(getCell(r, ['Resumo do Cenário','Resumo do Cenario','Resumo','resumo'])).trim();
-    const articulacao = String(getCell(r, ['Articulação / Dependências','Articulacao / Dependencias','Articulação','Articulacao','articulacao','Dependências','Dependencias'])).trim();
+function parseRows(rows, isLoad, mesMonitoramento='', nomeArquivo=''){
+  const metas = parseRowsParaSupabase(rows, mesMonitoramento, anoAtual(), nomeArquivo);
+  let count = 0;
+  metas.forEach(m=>{
     if(isLoad){
-      const exists = allData.find(d=>d.mes===mes&&d.unidade===unit&&d.meta===meta);
-      if(exists){
-        Object.assign(exists,{status,responsavel:resp,diagnostico:diag,resumo,articulacao});
-        return;
-      }
+      const exists = allData.find(d=>d.mes===m.mes&&d.unidade===m.unidade&&d.meta===m.meta);
+      if(exists){ Object.assign(exists,m); count++; return; }
     }
-    parsed.push({id:uid(),mes,unidade:unit,meta,status,responsavel:resp,diagnostico:diag,resumo,articulacao});
+    allData.push({id:uid(), ...m});
+    count++;
   });
-  allData.push(...parsed);
-  return parsed.length;
+  return count;
 }
 
 // ===== FILTERS =====
@@ -1557,39 +1763,22 @@ function renderDiagSection(title, value, cls){
 }
 
 function renderDiagnosticoPorStatus(m){
-  const status = m.status || '';
-  const sections = extractDiagnosticSections(m.diagnostico||'');
-  if(sections._geral){
-    if(status==='Em andamento') sections.andamento = sections._geral;
-    else if(status==='Atrasada') sections.motivoAtraso = sections._geral;
-    else if(status==='Não iniciada') sections.motivoNaoIniciada = sections._geral;
-    else sections.andamento = sections._geral;
+  const blocos = [];
+  const diagnostico = removerMotivosDoDiagnostico((m.diagnostico||'').replace(/\n/g,'\n'));
+  if(diagnostico){
+    blocos.push(renderDiagSection('Diagnóstico / Justificativa', diagnostico, ''));
   }
-  if(m.motivo_atraso) sections.motivoAtraso = m.motivo_atraso;
-  if(m.motivo_nao_iniciada) sections.motivoNaoIniciada = m.motivo_nao_iniciada;
-  if(status==='Em andamento'){
-    return `<div class="diagnostico-grid">
-      ${renderDiagSection('Fase', sections.fase, 'ea')}
-      ${renderDiagSection('Andamento', sections.andamento, 'ea')}
-      ${renderDiagSection('Ações do mês', sections.acoesMes, 'ea')}
-      ${renderDiagSection('Cronograma', sections.cronograma, 'ea')}
-    </div>`;
+  if(m.status === 'Atrasada' && m.motivo_atraso){
+    blocos.push(renderDiagSection('Motivo do atraso', m.motivo_atraso, 'at'));
   }
-  if(status==='Atrasada'){
-    return `<div class="diagnostico-grid">
-      ${renderDiagSection('Andamento', sections.andamento, 'at')}
-      ${renderDiagSection('Motivo do atraso', sections.motivoAtraso, 'at')}
-    </div>`;
+  if(m.status === 'Não iniciada' && m.motivo_nao_iniciada){
+    blocos.push(renderDiagSection('Motivo de não ter sido iniciada', m.motivo_nao_iniciada, 'ni'));
   }
-  if(status==='Não iniciada'){
-    return `<div class="diagnostico-grid">
-      ${renderDiagSection('Motivo de não ter sido iniciada', sections.motivoNaoIniciada, 'ni')}
-    </div>`;
+  if(!blocos.length && (m.motivo_atraso || m.motivo_nao_iniciada)){
+    if(m.motivo_atraso) blocos.push(renderDiagSection('Motivo do atraso', m.motivo_atraso, 'at'));
+    if(m.motivo_nao_iniciada) blocos.push(renderDiagSection('Motivo de não ter sido iniciada', m.motivo_nao_iniciada, 'ni'));
   }
-  if(m.diagnostico){
-    return `<div class="diagnostico-grid">${renderDiagSection('Diagnóstico / Justificativa', sections.andamento || sections._geral || m.diagnostico, '')}</div>`;
-  }
-  return '';
+  return blocos.length ? `<div class="diagnostico-grid">${blocos.join('')}</div>` : '';
 }
 
 function toggleMeta(bid){
@@ -1918,7 +2107,7 @@ async function handleReplace(input){
       const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
       const ws = wb.Sheets[wsName];
       const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-      const metas = parseRowsParaSupabase(rows, mesMonitoramento);
+      const metas = parseRowsParaSupabase(rows, mesMonitoramento, anoAtual(), file.name);
       if(!metas.length){ showToast('Nenhuma meta válida encontrada no Excel.','error'); return; }
       if(!supabaseConfigurado()){
         showToast('Configure o Supabase no HTML antes de substituir metas.', 'error');
@@ -1989,7 +2178,7 @@ async function handleReplace(input){
       const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
       const ws = wb.Sheets[wsName];
       const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-      const metas = parseRowsParaSupabase(rows, periodo.mes, periodo.ano);
+      const metas = parseRowsParaSupabase(rows, periodo.mes, periodo.ano, file.name);
       if(!metas.length){ showToast('Nenhuma meta válida encontrada no Excel.','error'); return; }
       if(!supabaseConfigurado()){ showToast('Configure o Supabase no HTML antes de substituir metas.', 'error'); return; }
       const { error: rpcError } = await supabaseClient.rpc('arquivar_ciclo_atual_codae', { ano_analise: periodo.ano });
@@ -2016,32 +2205,88 @@ async function handleReplace(input){
   input.value='';
 }
 
+function lerArquivoExcelComoWorkbook(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const wb = XLSX.read(e.target.result,{type:'binary'});
+        resolve(wb);
+      }catch(err){
+        reject(err);
+      }
+    };
+    reader.onerror = ()=>reject(reader.error || new Error('Não foi possível ler o arquivo '+file.name));
+    reader.readAsBinaryString(file);
+  });
+}
+
+function extrairRowsWorkbook(wb){
+  const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
+  if(!wsName) return [];
+  const ws = wb.Sheets[wsName];
+  return XLSX.utils.sheet_to_json(ws,{defval:''});
+}
+
 async function handleXLSX(input){
-  const file = input.files[0]; if(!file) return;
-  const periodo = await askMonitoringPeriod({title:'Importar novo Excel', info:'Selecione o mês e informe o ano de análise deste Excel antes de confirmar a importação.'});
+  const files = Array.from(input.files || []).filter(f=>/\.(xlsx|xls)$/i.test(f.name));
+  if(!files.length) return;
+  const plural = files.length > 1;
+  const periodo = await askMonitoringPeriod({
+    title: plural ? 'Importar vários Excels' : 'Importar novo Excel',
+    info: plural
+      ? `Selecione o mês e informe o ano de análise para importar ${files.length} arquivos Excel de uma vez.`
+      : 'Selecione o mês e informe o ano de análise deste Excel antes de confirmar a importação.'
+  });
   if(!periodo){ input.value=''; showToast('Importação cancelada: é obrigatório informar mês e ano.','error'); return; }
-  const reader = new FileReader();
-  reader.onload = async e=>{
-    try{
-      const wb = XLSX.read(e.target.result,{type:'binary'});
-      const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
-      const ws = wb.Sheets[wsName];
-      const rows = XLSX.utils.sheet_to_json(ws,{defval:''});
-      const metas = parseRowsParaSupabase(rows, periodo.mes, periodo.ano);
-      const ok = await inserirMetasSupabase(metas);
-      if(!ok) return;
-      await carregarDadosSupabase();
-      atualizarMetasPorUnidade();
-      document.getElementById('filtroMes').value = periodo.mes;
-      render();
-      showToast(`Importação concluída! ${metas.length} registros salvos no Supabase para ${periodo.mes}/${periodo.ano}.`,'success');
-    } catch(err){
-      console.error('Erro ao importar:', err);
-      showToast('Erro ao importar: '+(err.message || err),'error');
+
+  try{
+    const todasMetas = [];
+    const erros = [];
+
+    for(const file of files){
+      try{
+        const wb = await lerArquivoExcelComoWorkbook(file);
+        const rows = extrairRowsWorkbook(wb);
+        const metasArquivo = parseRowsParaSupabase(rows, periodo.mes, periodo.ano, file.name);
+        if(!metasArquivo.length){
+          erros.push(`${file.name}: nenhuma meta válida encontrada`);
+          continue;
+        }
+        todasMetas.push(...metasArquivo);
+      }catch(errArquivo){
+        console.error('Erro ao ler arquivo:', file.name, errArquivo);
+        erros.push(`${file.name}: ${errArquivo.message || errArquivo}`);
+      }
     }
-  };
-  reader.readAsBinaryString(file);
-  input.value='';
+
+    if(!todasMetas.length){
+      showToast('Nenhuma meta válida foi encontrada nos arquivos selecionados.', 'error');
+      if(erros.length) console.warn('Falhas na importação:', erros);
+      return;
+    }
+
+    const ok = await inserirMetasSupabase(todasMetas);
+    if(!ok) return;
+
+    await carregarDadosSupabase();
+    atualizarMetasPorUnidade();
+    document.getElementById('filtroMes').value = periodo.mes;
+    render();
+
+    const arquivosOk = files.length - erros.length;
+    if(erros.length){
+      console.warn('Alguns arquivos não foram importados:', erros);
+      showToast(`Importação parcial: ${todasMetas.length} registros salvos de ${arquivosOk}/${files.length} arquivo(s). Verifique o console para os arquivos com erro.`,'error');
+    }else{
+      showToast(`Importação concluída! ${todasMetas.length} registros salvos a partir de ${files.length} arquivo(s) para ${periodo.mes}/${periodo.ano}.`,'success');
+    }
+  }catch(err){
+    console.error('Erro ao importar arquivos:', err);
+    showToast('Erro ao importar arquivos: '+(err.message || err),'error');
+  }finally{
+    input.value='';
+  }
 }
 
 function openExcelManagerModal(){
@@ -2257,6 +2502,465 @@ document.addEventListener('keydown', e=>{
 
 // ===== INIT =====
 loadInitialData();
+
+
+/* ===== OVERRIDES: LEITURA INTELIGENTE DO EXCEL E CAIXINHAS POR STATUS ===== */
+(function(){
+  if(typeof STATUS_MAP !== 'undefined'){
+    STATUS_MAP['Status não informado'] = {cls:'ni',badge:'badge-ni',fill:'fill-ni',color:'#6b7280'};
+  }
+  if(typeof STATUS_ORDER !== 'undefined' && !STATUS_ORDER.includes('Status não informado')){
+    STATUS_ORDER.push('Status não informado');
+  }
+})();
+
+function normStatus(s, fallback='Status não informado'){
+  const raw = cleanCell(s);
+  if(!raw) return fallback;
+  const t = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+  if(/concluid|conclus|finaliz|realizad[ao]|100\s*%/.test(t)) return 'Concluída';
+  if(/atrasad|em atraso|fora do prazo|prazo vencido|vencid|atraso/.test(t)) return 'Atrasada';
+  if(/nao iniciad|nao comec|nao iniciado|a iniciar|sem inicio|sem execucao|nao houve inicio/.test(t)) return 'Não iniciada';
+  if(/andamento|execu|parcial|iniciad|em curso|desenvolvimento|acompanhamento|monitoramento|em elaboracao|tratativa|planejamento/.test(t)) return 'Em andamento';
+  return fallback;
+}
+
+const STATUS_FIELD_DEFS = {
+  'Em andamento': [
+    ['fase','Fase',['Qual fase do andamento está a meta','Qual fase do andamento esta a meta']],
+    ['andamento','Andamento',['Em relação ao mês anterior, o andamento da meta','Em relacao ao mes anterior, o andamento da meta']],
+    ['acoesPlanejadas','Ações planejadas',['As ações previstas para este mês foram executadas conforme o planejado','As acoes previstas para este mes foram executadas conforme o planejado']],
+    ['cronograma','Cronograma',['O cronograma da meta está','O cronograma da meta esta']],
+    ['resultado','Resultado',['O resultado atual está aderente ao esperado','O resultado atual esta aderente ao esperado']],
+    ['proximasEtapas','Próximas etapas',['As próximas etapas da meta estão definidas para o próximo mês','As proximas etapas da meta estao definidas para o proximo mes','Próximas etapas','Proximas etapas']],
+    ['riscoNaoCumprimento','Risco de não cumprimento',['Existe risco de não cumprimento da meta no prazo','Existe risco de nao cumprimento da meta no prazo','O risco de não cumprimento da meta é','O risco de nao cumprimento da meta e']],
+    ['observacoes','Observações',['Observações','Observacoes','Comentários','Comentarios']],
+    ['resumoCenario','Resumo do cenário',['Resumo do Cenário','Resumo do Cenario','Resumo']]
+  ],
+  'Atrasada': [
+    ['etapaAtraso','Etapa do atraso',['O atraso ocorreu em qual etapa']],
+    ['atrasoMesAnterior','Atraso em relação ao mês anterior',['Em relação ao mês anterior, a situação do atraso','Em relacao ao mes anterior, a situacao do atraso']],
+    ['impactoAtraso','Impacto do atraso',['O atraso está impactando o resultado da meta','O atraso esta impactando o resultado da meta']],
+    ['responsabilidadeAtraso','Responsabilidade do atraso',['O motivo do atraso está sob responsabilidade exclusiva da sua área','O motivo do atraso esta sob responsabilidade exclusiva da sua area']],
+    ['diretoriasAtraso','Diretorias responsáveis pelo atraso',['Qual diretoria está sendo responsável pelo atraso no andamento da meta','Qual diretoria esta sendo responsavel pelo atraso no andamento da meta']],
+    ['acoesCorretivas','Ações corretivas',['Sobre as ações corretivas para reverter o atraso','Sobre as acoes corretivas para reverter o atraso','Já foram definidas ações corretivas para reverter o atraso','Ja foram definidas acoes corretivas para reverter o atraso']],
+    ['novosPrazos','Novos prazos',['Existe novo prazo definido para a meta','Novo prazo','Novos prazos','Prazo atualizado','Previsão de regularização','Previsao de regularizacao']],
+    ['riscoNaoCumprimento','Risco de não cumprimento',['O risco de não cumprimento da meta é','O risco de nao cumprimento da meta e','Existe risco de não cumprimento da meta no prazo']],
+    ['prioridade','Prioridade da meta',['O nível de prioridade da meta neste momento é','O nivel de prioridade da meta neste momento e']],
+    ['apoioInstitucional','Apoio institucional',['Há necessidade de apoio institucional para regularizar o andamento','Ha necessidade de apoio institucional para regularizar o andamento']],
+    ['observacoes','Observações',['Observações','Observacoes','Comentários','Comentarios']],
+    ['resumoCenario','Resumo do cenário',['Resumo do Cenário','Resumo do Cenario','Resumo']]
+  ],
+  'Não iniciada': [
+    ['planoAcao','Plano de ação estruturado',['Essa meta já possui plano de ação estruturado','Essa meta ja possui plano de acao estruturado','Se já tiver plano de ação, ele está adequado para início da execução','Se ja tiver plano de acao, ele esta adequado para inicio da execucao']],
+    ['prioridade','Nível de prioridade',['O nível de prioridade atual da meta é','O nivel de prioridade atual da meta e','Qual o nível de prioridade para iniciar esta meta','Qual o nivel de prioridade para iniciar esta meta']],
+    ['dependencias','Dependências que impedem o início da meta',['Existem dependências que impedem o início da meta','Existem dependencias que impedem o inicio da meta','Se a resposta anterior foi sim, o tipo de dependência é','Se a resposta anterior foi sim, o tipo de dependencia e']],
+    ['previsaoInicio','Previsão para iniciar',['Existe previsão definida para início da meta','Existe previsao definida para inicio da meta']],
+    ['acoesInicio','Ações definidas para iniciar a meta',['Existe alguma ação já definida para viabilizar o início da meta','Existe alguma acao ja definida para viabilizar o inicio da meta','Ações definidas para iniciar','Acoes definidas para iniciar']],
+    ['observacoes','Observações',['Observações','Observacoes','Comentários','Comentarios']],
+    ['resumoCenario','Resumo do cenário',['Resumo do Cenário','Resumo do Cenario','Resumo']]
+  ],
+  'Concluída': [
+    ['observacoes','Observações',['Observações','Observacoes','Comentários','Comentarios']],
+    ['resumoCenario','Resumo do cenário',['Resumo do Cenário','Resumo do Cenario','Resumo']]
+  ],
+  'Status não informado': [
+    ['observacoes','Observações',['Observações','Observacoes','Comentários','Comentarios']],
+    ['resumoCenario','Resumo do cenário',['Resumo do Cenário','Resumo do Cenario','Resumo']]
+  ]
+};
+
+function statusCssClass(status){
+  if(status==='Em andamento') return 'status-section-em-andamento';
+  if(status==='Atrasada') return 'status-section-atrasada';
+  if(status==='Não iniciada') return 'status-section-nao-iniciada';
+  if(status==='Concluída') return 'status-section-concluida';
+  return '';
+}
+function isTechnicalOrScoreColumn(h){
+  const raw = cleanCell(h).toLowerCase();
+  const nk = normalizeHeaderKey(h);
+  return raw.startsWith('pontos') || nk==='totaldepontos' || nk==='comentariosdoteste' || nk==='horadepostagemdanota' || nk==='horadeinicio' || nk==='horadeconclusao' || nk==='email' || nk==='id';
+}
+function getRespostasPorTermos(row, termos, opts={}){
+  const termosNorm = termos.map(t=>normalizeHeaderKey(t)).filter(Boolean);
+  const out = [];
+  const vistos = new Set();
+  Object.keys(row || {}).forEach(k=>{
+    const raw = cleanCell(k);
+    const isComment = /^comentários\s*[–-]/i.test(raw) || /^comentarios\s*[–-]/i.test(raw);
+    if(isTechnicalOrScoreColumn(k) && !(opts.comments && isComment)) return;
+    if(isComment && !opts.comments) return;
+    const ck = chavePergunta(k);
+    if(!ck) return;
+    if(termosNorm.some(t=>ck === t || ck.includes(t) || t.includes(ck))){
+      const v = row[k];
+      if(valorRespostaValido(v)){
+        const val = cleanCell(v);
+        const id = normalizeHeaderKey(limparRotuloPergunta(k))+'|'+normalizeHeaderKey(val);
+        if(!vistos.has(id)){ vistos.add(id); out.push({header:k,label:limparRotuloPergunta(k),value:val}); }
+      }
+    }
+  });
+  return out;
+}
+function primeiraRespostaEstruturada(row, termos){
+  const r = getRespostasPorTermos(row, termos);
+  return r.length ? r[0].value : '';
+}
+function comentariosRelacionados(row, defs){
+  const partes=[];
+  const vistos=new Set();
+  defs.forEach(def=>{
+    const respostas = getRespostasPorTermos(row, def[2], {comments:true});
+    respostas.forEach(r=>{
+      const txt = `${def[1]}: ${r.value}`;
+      const k = normalizeHeaderKey(txt);
+      if(!vistos.has(k)){ vistos.add(k); partes.push(txt); }
+    });
+  });
+  return partes.join('\n');
+}
+function extrairCamposStatusExcel(row, status){
+  const defs = STATUS_FIELD_DEFS[status] || STATUS_FIELD_DEFS['Status não informado'];
+  const campos = {};
+  defs.forEach(([key,label,terms])=>{
+    if(key==='observacoes') return;
+    const v = primeiraRespostaEstruturada(row, terms);
+    if(v) campos[key] = v;
+  });
+  const obs = comentariosRelacionados(row, defs);
+  if(obs) campos.observacoes = obs;
+  return campos;
+}
+function parseDiagnosticToMap(text){
+  const defs = Object.values(STATUS_FIELD_DEFS).flat();
+  const labels = [...new Set(defs.map(d=>d[1]).concat(['Diagnóstico / Justificativa','Diagnóstico','Articulação / Dependências']))];
+  const alias = new Map(labels.map(l=>[normalizeHeaderKey(l), l]));
+  const map = {};
+  const source = String(text||'').replace(/\\n/g,'\n').trim();
+  if(!source) return map;
+  const escaped = labels.map(l=>l.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+  const re = new RegExp('(?:^|\\n)\\s*('+escaped+')\\s*[:\\-–—]\\s*','gi');
+  const matches=[...source.matchAll(re)];
+  if(!matches.length){ map['Diagnóstico / Justificativa']=source; return map; }
+  matches.forEach((m,i)=>{
+    const label = alias.get(normalizeHeaderKey(m[1])) || m[1];
+    const start = m.index + m[0].length;
+    const end = i+1<matches.length ? matches[i+1].index : source.length;
+    const val = source.slice(start,end).trim();
+    if(val) map[label]=val;
+  });
+  return map;
+}
+function composeDiagnosticFromCampos(status, campos={}, complemento=''){
+  const defs = STATUS_FIELD_DEFS[status] || STATUS_FIELD_DEFS['Status não informado'];
+  const linhas=[];
+  defs.forEach(([key,label])=>{
+    if(key==='resumoCenario') return;
+    const v = cleanCell(campos[key] || '');
+    if(v) linhas.push(`${label}: ${v}`);
+  });
+  const comp = cleanCell(complemento || '');
+  if(comp) linhas.push(`Diagnóstico / Justificativa: ${comp}`);
+  return linhas.join('\n');
+}
+function resumoAutomatico(status, campos){
+  const defs = STATUS_FIELD_DEFS[status] || [];
+  const principais = defs.filter(d=>!['observacoes','resumoCenario'].includes(d[0])).slice(0,5)
+    .map(([key,label])=> campos[key] ? `${label}: ${campos[key]}` : '').filter(Boolean);
+  if(status==='Concluída' && !principais.length) return 'Meta concluída. Não há observações complementares informadas para este mês de referência.';
+  return principais.join(' | ');
+}
+function definirStatusMetaExcel(row){
+  const respostasStatus = getRespostasPorTermos(row, [
+    'Qual o status atual da meta', 'Status atual da meta', 'Status da Meta', 'Status meta', 'Status',
+    'Situação atual', 'Situacao atual', 'Situação da Meta', 'Situacao da Meta'
+  ]).map(x=>x.value).filter(valorRespostaValido);
+  for(const v of respostasStatus){
+    const normalizado = normStatus(v, '');
+    if(normalizado) return normalizado;
+  }
+  const percentuais = PERCENT_COLUMNS.map(c=>percentualExecucaoValor(getCell(row,[c]))).filter(n=>n>0);
+  if(percentuais.some(n=>n>=100)) return 'Concluída';
+  if(percentuais.some(n=>n>0)) return 'Em andamento';
+  return 'Status não informado';
+}
+function definirStatusMetaExcelSemDiagnostico(row){ return definirStatusMetaExcel(row); }
+function extrairResumoExcel(row, statusArg='', camposArg=null){
+  const direto = primeiraRespostaEstruturada(row, ['Resumo do Cenário','Resumo do Cenario','Resumo']);
+  if(direto) return direto;
+  const status = statusArg || definirStatusMetaExcel(row);
+  const campos = camposArg || extrairCamposStatusExcel(row, status);
+  return resumoAutomatico(status, campos);
+}
+function extrairArticulacaoExcel(row){
+  const direto = primeiraRespostaEstruturada(row, ['Articulação / Dependências','Articulacao / Dependencias','Articulação','Articulacao','Dependências','Dependencias']);
+  if(direto) return direto;
+  return primeiraRespostaEstruturada(row, ['Qual diretoria está sendo responsável pelo atraso no andamento da meta','Qual diretoria esta sendo responsavel pelo atraso no andamento da meta','Existem dependências que impedem o início da meta','Existem dependencias que impedem o inicio da meta']);
+}
+function montarDiagnosticoExcel(row){
+  const status = definirStatusMetaExcel(row);
+  const campos = extrairCamposStatusExcel(row, status);
+  const direto = primeiraRespostaEstruturada(row, ['Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico','Justificativa','Leitura da meta','Leitura do card','Evolução mensal','Evolucao mensal']);
+  return composeDiagnosticFromCampos(status, campos, direto);
+}
+function parseRowsParaSupabase(rows, mesMonitoramento='', anoAnalise=anoAtual(), nomeArquivo=''){
+  const parsed=[];
+  const mesForcado = normalizeMonth(mesMonitoramento);
+  const unidadeArquivo = inferirUnidadePeloArquivo(nomeArquivo);
+  (rows || []).forEach(r=>{
+    const unit = normUnit(primeiraRespostaEstruturada(r, ['Diretoria','Unidade','Divisão','Divisao'])) || unidadeArquivo || normUnit(getCell(r, ['Diretoria','Unidade','Divisão','Divisao']));
+    const meta = extrairMetaExcel(r) || cleanCell(getCell(r, ['Meta','Descrição da Meta','Descricao da Meta']));
+    if(!unit || !meta) return;
+    const status = definirStatusMetaExcel(r);
+    const mesOriginal = extrairMesExcel(r) || getCell(r, ['Mês','Mes','Mês de Referência','Mes de Referencia']);
+    const mes = normalizeMonth(mesOriginal) || mesForcado;
+    if(!mes) return;
+    const campos = extrairCamposStatusExcel(r, status);
+    const diagnosticoDireto = primeiraRespostaEstruturada(r, ['Diagnóstico / Justificativa','Diagnostico / Justificativa','Diagnóstico','Diagnostico','Justificativa','Leitura da meta','Leitura do card','Evolução mensal','Evolucao mensal']);
+    const resumo = campos.resumoCenario || extrairResumoExcel(r, status, campos);
+    parsed.push({
+      ano: Number(anoAnalise) || anoAtual(),
+      mes,
+      unidade: unit,
+      meta,
+      status,
+      responsavel: extrairResponsavelExcel(r) || cleanCell(getCell(r, ['Responsável','Responsavel'])),
+      diagnostico: composeDiagnosticFromCampos(status, campos, diagnosticoDireto),
+      resumo,
+      articulacao: extrairArticulacaoExcel(r),
+      motivo_atraso: status==='Atrasada' ? (campos.etapaAtraso || campos.impactoAtraso || '') : '',
+      motivo_nao_iniciada: status==='Não iniciada' ? (campos.planoAcao || campos.dependencias || '') : ''
+    });
+  });
+  return parsed;
+}
+function renderInfoBox(label, value){
+  const txt = cleanCell(value || '');
+  if(!txt) return '';
+  return `<div class="info-box"><span class="info-label">${escHtml(label)}</span><p class="info-value">${escHtml(txt)}</p></div>`;
+}
+function camposRenderizaveis(m){
+  const status = normStatus(m.status, 'Status não informado');
+  const map = parseDiagnosticToMap(m.diagnostico || '');
+  const defs = STATUS_FIELD_DEFS[status] || STATUS_FIELD_DEFS['Status não informado'];
+  const out = [];
+  defs.forEach(([key,label])=>{
+    if(key==='resumoCenario'){
+      const v = m.resumo || map[label] || '';
+      if(v) out.push([label, v]);
+      return;
+    }
+    let v = map[label] || '';
+    if(!v && key==='fase') v = m.fase || '';
+    if(!v && key==='andamento') v = m.andamento || '';
+    if(!v && key==='acoesPlanejadas') v = m.acoes_do_mes || '';
+    if(!v && key==='cronograma') v = m.cronograma || '';
+    if(!v && key==='etapaAtraso') v = m.motivo_atraso || '';
+    if(!v && key==='planoAcao') v = m.motivo_nao_iniciada || '';
+    if(v) out.push([label, v]);
+  });
+  if(!out.length && status==='Concluída') out.push(['Resumo do cenário', 'Meta concluída. Não há observações complementares informadas para este mês de referência.']);
+  if(!out.length && map['Diagnóstico / Justificativa']) out.push(['Diagnóstico / Justificativa', map['Diagnóstico / Justificativa']]);
+  return out;
+}
+function renderDiagnosticoPorStatus(m){
+  const campos = camposRenderizaveis(m);
+  if(!campos.length) return `<div class="meta-info-grid ${statusCssClass(m.status)}">${renderInfoBox('Informações complementares','Não informado')}</div>`;
+  return `<div class="meta-info-grid ${statusCssClass(m.status)}">${campos.map(([l,v])=>renderInfoBox(l,v)).join('')}</div>`;
+}
+function renderList(data){
+  const grouped = {};
+  STATUS_ORDER.forEach(s=>grouped[s]=[]);
+  data.forEach(d=>(grouped[d.status]=grouped[d.status]||[]).push(d));
+  let html = '';
+  STATUS_ORDER.forEach(st=>{
+    const items = grouped[st]||[];
+    if(!items.length) return;
+    const cfg = STATUS_MAP[st]||STATUS_MAP['Status não informado'];
+    html += `<div class="section-title"><span>${escHtml(st)}</span><span class="section-count ${cfg.cls}">${items.length} meta${items.length>1?'s':''}</span></div><div class="metas-list">`;
+    items.forEach(m=>{
+      const c = STATUS_MAP[m.status]||STATUS_MAP['Status não informado'];
+      const dc = DIV_COLOR[m.unidade]||DIV_COLOR[String(m.unidade||'').toUpperCase()]||'#374151';
+      const bid = 'body_'+m.id;
+      html += `<div class="meta-card" data-status="${escAttr(m.status)}">
+        <div class="meta-header" onclick="toggleMeta('${escAttr(bid)}')">
+          <div class="status-dot" style="background:${c.color}"></div>
+          <div class="meta-header-meta">
+            <div class="meta-header-line"><span class="status-badge ${c.badge}">${escHtml(m.status || 'Status não informado')}</span><span class="unit-tag" style="background:${dc}">${escHtml(m.unidade || '—')}</span><span>📅 ${escHtml(m.mes || 'Não informado')}</span><span>👤 ${escHtml(m.responsavel || 'Não informado')}</span></div>
+            <span class="meta-name-text">${escHtml(m.meta || 'Meta não informada')}</span>
+          </div>
+          <span class="meta-chevron" id="chev_${escAttr(bid)}">⌄</span>
+        </div>
+        <div class="meta-body" id="${escAttr(bid)}">
+          <div class="meta-detail-grid">
+            <div class="meta-detail-item"><div class="k">Responsável</div><div class="v">${escHtml(m.responsavel || 'Não informado')}</div></div>
+            <div class="meta-detail-item"><div class="k">Mês de referência</div><div class="v">${escHtml(m.mes || 'Não informado')}</div></div>
+            <div class="meta-detail-item"><div class="k">Status</div><div class="v"><span class="status-badge ${c.badge}">${escHtml(m.status || 'Status não informado')}</span></div></div>
+            <div class="meta-detail-item"><div class="k">Divisão</div><div class="v" style="color:${dc};font-weight:700">${escHtml(m.unidade || 'Não informado')}</div></div>
+            <div class="meta-detail-item" style="grid-column:1/-1"><div class="k">Meta</div><div class="v">${escHtml(m.meta || 'Não informado')}</div></div>
+          </div>
+          ${renderDiagnosticoPorStatus(m)}
+          ${m.articulacao&&m.articulacao!=='Nenhuma pendência externa reportada.'?renderInfoBox('Articulação / Dependências', m.articulacao):''}
+          <div class="meta-actions"><button class="btn btn-outline btn-sm" onclick="openEditModal('${escAttr(m.id)}')">✏ Editar</button><button class="btn btn-outline btn-sm" style="color:#b21f2d;border-color:#fca5a5" onclick="deleteMeta('${escAttr(m.id)}')">🗑 Remover</button></div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  if(!html) html = `<div class="empty-state"><span class="big-icon">🎯</span>Nenhuma meta encontrada com os filtros aplicados.</div>`;
+  document.getElementById('metasList').innerHTML = html;
+}
+function onStatusFormChange(valores={}){
+  const status = normStatus(document.getElementById('f_status')?.value || 'Não iniciada', 'Não iniciada');
+  const defs = STATUS_FIELD_DEFS[status] || STATUS_FIELD_DEFS['Não iniciada'];
+  const c = document.getElementById('statusFieldsContainer');
+  if(!c) return;
+  c.innerHTML = defs.filter(d=>d[0] !== 'resumoCenario').map(([key,label])=>{
+    const val = valores[key] || valores[label] || '';
+    return `<div class="form-full"><label class="form-label">${escHtml(label)}</label><textarea id="f_sf_${escAttr(key)}" data-status-key="${escAttr(key)}" data-status-label="${escAttr(label)}" class="form-control" rows="2" placeholder="Preencha ${escAttr(label.toLowerCase())}">${escHtml(val)}</textarea></div>`;
+  }).join('');
+  const legacy = document.getElementById('f_motivo_atraso')?.closest('.form-row');
+  if(legacy) legacy.style.display = 'none';
+  const art = document.getElementById('f_articulacao')?.closest('.form-full');
+  if(art) art.style.display = (status==='Atrasada' || status==='Não iniciada') ? '' : 'none';
+}
+function getStatusFormValues(){
+  const campos = {};
+  document.querySelectorAll('[data-status-key]').forEach(el=>{
+    const key = el.dataset.statusKey;
+    campos[key] = el.value.trim();
+  });
+  return campos;
+}
+function valuesFromMetaForForm(m){
+  const map = parseDiagnosticToMap(m?.diagnostico || '');
+  const status = normStatus(m?.status || 'Não iniciada', 'Não iniciada');
+  const defs = STATUS_FIELD_DEFS[status] || STATUS_FIELD_DEFS['Não iniciada'];
+  const vals = {};
+  defs.forEach(([key,label])=>{ vals[key] = map[label] || ''; });
+  vals.fase = vals.fase || m?.fase || '';
+  vals.andamento = vals.andamento || m?.andamento || '';
+  vals.acoesPlanejadas = vals.acoesPlanejadas || m?.acoes_do_mes || '';
+  vals.cronograma = vals.cronograma || m?.cronograma || '';
+  vals.etapaAtraso = vals.etapaAtraso || m?.motivo_atraso || '';
+  vals.planoAcao = vals.planoAcao || m?.motivo_nao_iniciada || '';
+  return vals;
+}
+function clearMetaForm(){
+  ['f_mes','f_meta','f_responsavel','f_diagnostico','f_motivo_atraso','f_motivo_nao_iniciada','f_resumo','f_articulacao'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('f_unidade').value='';
+  document.getElementById('f_status').value='Não iniciada';
+  document.getElementById('f_meta_select').style.display='none';
+  document.getElementById('f_meta').style.display='';
+  onStatusFormChange();
+}
+function openNewMetaModal(){
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Adicionar Evolução das Metas';
+  clearMetaForm();
+  document.getElementById('metaModal').style.display = 'flex';
+}
+function openEditModal(id){
+  const m = allData.find(d=>d.id===id);
+  if(!m) return;
+  editingId = id;
+  const map = parseDiagnosticToMap(m.diagnostico || '');
+  document.getElementById('modalTitle').textContent = 'Editar Meta';
+  document.getElementById('f_mes').value = m.mes||'';
+  document.getElementById('f_unidade').value = m.unidade||'';
+  document.getElementById('f_meta').value = m.meta||'';
+  document.getElementById('f_meta_select').style.display = 'none';
+  document.getElementById('f_meta').style.display = '';
+  document.getElementById('f_status').value = ['Não iniciada','Em andamento','Atrasada','Concluída'].includes(m.status) ? m.status : 'Não iniciada';
+  document.getElementById('f_responsavel').value = m.responsavel||'';
+  document.getElementById('f_diagnostico').value = map['Diagnóstico / Justificativa'] || '';
+  document.getElementById('f_resumo').value = m.resumo || map['Resumo do cenário'] || '';
+  document.getElementById('f_articulacao').value = m.articulacao||'';
+  document.getElementById('f_motivo_atraso').value = m.motivo_atraso || '';
+  document.getElementById('f_motivo_nao_iniciada').value = m.motivo_nao_iniciada || '';
+  onStatusFormChange(valuesFromMetaForForm(m));
+  document.getElementById('metaModal').style.display = 'flex';
+}
+async function saveMeta(){
+  const mes = document.getElementById('f_mes').value.trim();
+  const unidade = document.getElementById('f_unidade').value.trim();
+  const meta = document.getElementById('f_meta').value.trim() || document.getElementById('f_meta_select').value;
+  const status = normStatus(document.getElementById('f_status').value, 'Não iniciada');
+  if(!mes){showToast('Informe o mês de referência.','error');return;}
+  if(!unidade){showToast('Selecione a divisão.','error');return;}
+  if(!meta){showToast('Preencha a descrição da meta.','error');return;}
+  const existente = editingId ? allData.find(d=>d.id===editingId) : null;
+  const campos = getStatusFormValues();
+  const resumoManual = document.getElementById('f_resumo').value.trim();
+  const obj = montarPayloadMeta({
+    ano: existente?.ano || anoAtual(),
+    mes, unidade, meta, status,
+    responsavel: document.getElementById('f_responsavel').value.trim(),
+    diagnostico: composeDiagnosticFromCampos(status, campos, document.getElementById('f_diagnostico').value.trim()),
+    motivo_atraso: status==='Atrasada' ? (campos.etapaAtraso || '') : '',
+    motivo_nao_iniciada: status==='Não iniciada' ? (campos.planoAcao || campos.dependencias || '') : '',
+    resumo: resumoManual || campos.resumoCenario || resumoAutomatico(status, campos),
+    articulacao: document.getElementById('f_articulacao').value.trim()
+  });
+  if(!supabaseConfigurado()){ showToast('Configure o Supabase no HTML antes de salvar.', 'error'); return; }
+  try{
+    if(editingId){
+      const { error } = await supabaseClient.from('metas_codae').update(obj).eq('id', editingId);
+      if(error) throw error;
+      showToast('Meta atualizada com sucesso no Supabase!','success');
+    } else {
+      const { error } = await supabaseClient.from('metas_codae').insert([obj]);
+      if(error) throw error;
+      showToast('Meta adicionada com sucesso no Supabase!','success');
+    }
+    closeMetaModal();
+    await carregarDadosSupabase();
+  }catch(e){
+    console.error('Erro ao salvar meta no Supabase:', e);
+    showToast('Erro ao salvar meta no Supabase: '+(e.message || e), 'error');
+  }
+}
+async function handleReplaceMonth(input){
+  const file = input.files[0]; if(!file) return;
+  const mes = document.getElementById('mgrMes').value;
+  const ano = Number(document.getElementById('mgrAno').value);
+  if(!mes || !ano){ input.value=''; showToast('Informe mês e ano antes de substituir.','error'); return; }
+  if(!confirm(`Substituir somente os dados de ${mes}/${ano} por este novo Excel?`)){ input.value=''; return; }
+  const reader = new FileReader();
+  reader.onload = async e=>{
+    try{
+      const wb = XLSX.read(e.target.result,{type:'binary'});
+      const wsName = wb.SheetNames.find(n=>n.toLowerCase().includes('consolid')||n.toLowerCase().includes('meta'))||wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wsName],{defval:''});
+      const metas = parseRowsParaSupabase(rows, mes, ano, file.name);
+      if(!metas.length){ showToast('Nenhuma meta válida encontrada no Excel.','error'); return; }
+      const { error } = await supabaseClient.from('metas_codae').update({ativo:false}).eq('mes', mes).eq('ano', ano);
+      if(error) throw error;
+      const ok = await inserirMetasSupabase(metas);
+      if(!ok) return;
+      await carregarDadosSupabase();
+      atualizarMetasPorUnidade();
+      document.getElementById('filtroMes').value = mes;
+      closeExcelManagerModal();
+      render();
+      showToast(`Excel de ${mes}/${ano} substituído com sucesso.`, 'success');
+    }catch(e){
+      console.error('Erro ao substituir Excel do mês:', e);
+      showToast('Erro ao substituir Excel do mês: '+(e.message || e), 'error');
+    }
+  };
+  reader.readAsBinaryString(file);
+  input.value='';
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const st = document.getElementById('f_status');
+  if(st && !st.dataset.statusReady){ st.dataset.statusReady='1'; st.addEventListener('change', ()=>onStatusFormChange()); }
+  onStatusFormChange();
+});
+
 </script>
 </body>
 </html>
